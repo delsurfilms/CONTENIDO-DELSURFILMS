@@ -488,6 +488,22 @@ async function sbSetState(data){
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
+/* garantiza que state siempre tenga todas sus listas, sin importar
+   qué tan "vacío" venga el dato guardado en Supabase. Se usa en TODOS
+   los lugares donde se reemplaza state (carga inicial, sync automático
+   cada 15s, y el botón de actualizar) — antes solo se aplicaba en la
+   carga inicial, y el sync automático podía "vaciar" el estado a mitad
+   de que alguien estaba llenando el formulario, rompiendo el guardado. */
+function normalizeState(data){
+  const s = data || {};
+  if(!s.items) s.items = [];
+  if(!s.clients) s.clients = [];
+  if(!s.team) s.team = [];
+  if(!s.clientProfiles) s.clientProfiles = {};
+  if(!s.ideas) s.ideas = [];
+  return s;
+}
+
 async function loadState(){
   const statusEl = document.getElementById('conn-status');
   if(!hasConfig()){
@@ -498,17 +514,12 @@ async function loadState(){
   }
   try{
     const data = await sbGetState();
-    if(data){ state = data; }
+    if(data){ state = normalizeState(data); }
     statusEl.textContent = 'Conectado ✓';
   }catch(e){
     statusEl.textContent = '⚠ No se pudo conectar con Supabase.';
     statusEl.style.color = 'var(--accent)';
   }
-  if(!state.items) state.items = [];
-  if(!state.clients) state.clients = [];
-  if(!state.team) state.team = [];
-  if(!state.clientProfiles) state.clientProfiles = {};
-  if(!state.ideas) state.ideas = [];
   renderAll();
 }
 
@@ -523,13 +534,19 @@ async function saveState(){
   }
 }
 
-/* refetch periodically so the team sees each other's changes without reloading */
+/* refetch periodically so the team sees each other's changes without reloading.
+   Se salta el sync si hay un modal abierto, para no pisar una edición en curso
+   con datos que lleguen de otra persona (o del propio servidor) mientras
+   alguien está completando un formulario. */
+function anyModalOpen(){
+  return document.querySelectorAll('.overlay.open').length > 0;
+}
 setInterval(async () => {
-  if(!hasConfig()) return;
+  if(!hasConfig() || anyModalOpen()) return;
   try{
     const data = await sbGetState();
     if(data && JSON.stringify(data) !== JSON.stringify(state)){
-      state = data;
+      state = normalizeState(data);
       renderAll();
     }
   }catch(e){ /* silent — next poll will retry */ }
@@ -951,7 +968,7 @@ document.getElementById('refresh-btn').addEventListener('click', async () => {
   if(!hasConfig()){ showToast('Falta configurar SUPABASE_URL y SUPABASE_ANON_KEY en el código.'); return; }
   try{
     const data = await sbGetState();
-    if(data){ state = data; renderAll(); showToast('Actualizado'); }
+    if(data){ state = normalizeState(data); renderAll(); showToast('Actualizado'); }
   }catch(e){ showToast('No se pudo actualizar. Revisá la conexión.'); }
 });
 
