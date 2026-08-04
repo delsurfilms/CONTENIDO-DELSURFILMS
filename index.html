@@ -241,6 +241,11 @@
     display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;text-align:center;
   }
   .img-add-btn:hover{border-color:var(--ink-soft);}
+  .img-paste-btn{
+    all:unset;height:64px;padding:0 12px;border-radius:7px;border:1px solid var(--line);color:var(--ink-soft);
+    display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;text-align:center;white-space:nowrap;
+  }
+  .img-paste-btn:hover{border-color:var(--ink-soft);color:var(--ink);}
 </style>
 </head>
 <body>
@@ -383,6 +388,7 @@
         <label>Imágenes de referencia</label>
         <div class="img-field" id="f-images-field">
           <button type="button" class="img-add-btn" id="img-add-btn">+</button>
+          <button type="button" class="img-paste-btn" id="img-paste-btn">📋 Pegar imagen</button>
         </div>
         <input type="file" id="f-images-input" accept="image/*" multiple style="display:none;">
       </div>
@@ -971,12 +977,40 @@ function renderImgField(){
   wrap.innerHTML = modalImages.map(m => m.uploading
     ? `<div class="img-thumb uploading" data-id="${m.id}">Subiendo…</div>`
     : `<div class="img-thumb" data-id="${m.id}"><img src="${esc(m.url)}" alt=""><button type="button" class="rm" data-id="${m.id}" title="Quitar">×</button></div>`
-  ).join('') + `<button type="button" class="img-add-btn" id="img-add-btn">+</button>`;
+  ).join('')
+    + `<button type="button" class="img-add-btn" id="img-add-btn">+</button>`
+    + `<button type="button" class="img-paste-btn" id="img-paste-btn">📋 Pegar imagen</button>`;
   document.getElementById('img-add-btn').addEventListener('click', () => document.getElementById('f-images-input').click());
+  document.getElementById('img-paste-btn').addEventListener('click', pasteFromClipboardButton);
   wrap.querySelectorAll('.rm').forEach(btn => btn.addEventListener('click', () => {
     modalImages = modalImages.filter(m => m.id !== btn.dataset.id);
     renderImgField();
   }));
+}
+/* botón "Pegar imagen": lee el portapapeles del sistema directamente.
+   Sirve sobre todo en celular, donde no existe el atajo Ctrl+V — alcanza
+   con copiar una foto (ej. "Copiar" desde la app de Fotos) y tocar este botón,
+   sin necesidad de guardarla antes como archivo. */
+async function pasteFromClipboardButton(){
+  if(!navigator.clipboard || !navigator.clipboard.read){
+    showToast('Tu navegador no permite leer el portapapeles así. Usá el botón "+".');
+    return;
+  }
+  try{
+    const clipItems = await navigator.clipboard.read();
+    const files = [];
+    for(const item of clipItems){
+      const imgType = item.types.find(t => t.startsWith('image/'));
+      if(imgType){
+        const blob = await item.getType(imgType);
+        files.push(new File([blob], 'pegado.jpg', {type: imgType}));
+      }
+    }
+    if(files.length) uploadImagesToModal(files);
+    else showToast('No hay ninguna imagen copiada en el portapapeles.');
+  }catch(err){
+    showToast('No se pudo leer el portapapeles. Copiá la imagen de nuevo e intentá otra vez.');
+  }
 }
 /* sube una lista de archivos de imagen al modal (usado tanto al elegir
    archivos con el botón "+" como al pegar una imagen del portapapeles) */
