@@ -1,0 +1,9 @@
+{
+  "name": "DELSUR — Pipeline de contenido",
+  "short_name": "DELSUR",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F5F2EA",
+  "theme_color": "#1E1B16",
+  "orientation": "portrait-primary"
+}

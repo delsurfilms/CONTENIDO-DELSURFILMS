@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1E1B16">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="DELSUR">
+<link rel="manifest" href="manifest.json">
+<title>DELSUR — Pipeline de contenido</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F2EA;
+    --surface:#FFFFFF;
+    --surface-alt:#EDE9DC;
+    --ink:#1E1B16;
+    --ink-soft:#726C5E;
+    --ink-faint:#A39C8A;
+    --line:#DDD5C1;
+    --accent:#D6432E;
+    --accent-ink:#FFFFFF;
+    --sidebar-bg:#1E1B16;
+    --sidebar-ink:#F5F2EA;
+    --sidebar-ink-soft:#9C9689;
+    --s-idea:#8A8578;
+    --s-guion:#B08B4F;
+    --s-grabacion:#C2703A;
+    --s-edicion:#D6432E;
+    --s-revision:#8B5FA3;
+    --s-aprobacion:#3A6EA5;
+    --s-publicado:#4C7A4C;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:'Bebas Neue',sans-serif;letter-spacing:0.02em;font-weight:400;margin:0;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  a{color:inherit;}
+
+  /* ---------- layout ---------- */
+  #app{display:flex;min-height:100vh;}
+  .sidebar{
+    width:220px;flex-shrink:0;background:var(--sidebar-bg);color:var(--sidebar-ink);
+    padding:28px 20px;display:flex;flex-direction:column;gap:28px;position:sticky;top:0;height:100vh;
+  }
+  .brand{display:flex;flex-direction:column;gap:8px;}
+  .brand h1{font-size:26px;letter-spacing:0.06em;}
+  .brand .stripe{height:6px;width:64px;background:repeating-linear-gradient(45deg,var(--sidebar-ink) 0 6px,transparent 6px 12px);opacity:0.85;}
+  .brand .tag{font-size:11px;color:#B7B0A0;letter-spacing:0.08em;text-transform:uppercase;}
+  nav{display:flex;flex-direction:column;gap:4px;}
+  .navbtn{
+    all:unset;cursor:pointer;padding:11px 12px;border-radius:8px;font-size:14px;color:#D8D2C4;
+    display:flex;align-items:center;gap:10px;transition:background .15s, color .15s;
+  }
+  .navbtn:hover{background:rgba(255,255,255,0.06);color:#fff;}
+  .navbtn.active{background:var(--accent);color:#fff;}
+  .navbtn .n{font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:0.7;}
+  .sidebar-foot{margin-top:auto;font-size:11px;color:#8A8474;line-height:1.5;}
+
+  main{flex:1;min-width:0;padding:36px 40px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .view-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;}
+  .view-head h2{font-size:30px;}
+  .view-head .sub{color:var(--ink-soft);font-size:13px;margin-top:4px;}
+
+  .btn{
+    all:unset;cursor:pointer;background:var(--ink);color:var(--bg);font-size:13px;font-weight:600;
+    padding:10px 16px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;
+  }
+  .btn:hover{background:#000;}
+  .btn.accent{background:var(--accent);color:#fff;}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);}
+
+  /* ---------- dashboard ---------- */
+  .stat-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:28px;}
+  .stat-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+  .stat-card .num{font-family:'Bebas Neue',sans-serif;font-size:34px;line-height:1;}
+  .stat-card .lbl{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+  .stat-card.warn .num{color:var(--accent);}
+
+  .panels{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;align-items:start;}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;}
+  .panel h3{font-size:18px;margin-bottom:12px;}
+  .panel .empty{color:var(--ink-faint);font-size:13px;padding:10px 0;}
+
+  .row-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;}
+  .row-item:last-child{border-bottom:none;}
+  .row-item .client{font-weight:600;min-width:90px;}
+  .row-item .title{color:var(--ink-soft);flex:1;}
+  .row-item .due{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-faint);}
+  .row-item .due.late{color:var(--accent);font-weight:600;}
+  .tag{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:3px 7px;border-radius:5px;color:#fff;white-space:nowrap;}
+
+  .load-row{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;}
+  .load-row .name{min-width:100px;font-weight:600;}
+  .load-bar{flex:1;height:8px;background:var(--surface-alt);border-radius:4px;overflow:hidden;}
+  .load-bar > div{height:100%;background:var(--ink);}
+  .load-row .cnt{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);width:18px;text-align:right;}
+
+  /* ---------- pipeline / kanban ---------- */
+  .board{display:flex;gap:14px;overflow-x:auto;padding-bottom:16px;}
+  .column{background:var(--surface-alt);border-radius:var(--radius);width:230px;flex-shrink:0;display:flex;flex-direction:column;max-height:calc(100vh - 190px);}
+  .col-head{padding:12px 14px;border-bottom:2px solid var(--stage-color, var(--ink));display:flex;flex-direction:column;gap:2px;}
+  .col-head .n{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--stage-color);font-weight:600;}
+  .col-head .t{font-size:15px;font-weight:600;}
+  .col-head .c{font-size:11px;color:var(--ink-soft);}
+  .col-body{padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1;min-height:60px;}
+  .col-body.dragover{background:rgba(0,0,0,0.04);}
+  .card{
+    background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+    cursor:grab;font-size:12.5px;display:flex;flex-direction:column;gap:6px;
+  }
+  .card:active{cursor:grabbing;}
+  .card .client{font-weight:700;font-size:12px;}
+  .card .title{color:var(--ink-soft);}
+  .card .meta{display:flex;justify-content:space-between;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-faint);}
+  .card .meta .due.late{color:var(--accent);font-weight:600;}
+  .add-card-btn{all:unset;cursor:pointer;text-align:left;font-size:12px;color:var(--ink-soft);padding:8px 12px;border-radius:8px;}
+  .add-card-btn:hover{background:rgba(0,0,0,0.05);}
+  .drive-link{font-size:10.5px;color:var(--accent);text-decoration:none;font-weight:600;align-self:flex-start;}
+  .drive-link:hover{text-decoration:underline;}
+  .entity-card .drive-link{margin-top:2px;}
+
+  /* ---------- modal ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(20,18,14,0.5);display:none;align-items:center;justify-content:center;z-index:50;padding:20px;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--surface);border-radius:14px;width:420px;max-width:100%;padding:24px;max-height:88vh;overflow-y:auto;}
+  .modal h3{font-size:20px;margin-bottom:16px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);margin-bottom:5px;}
+  .field input, .field select{
+    width:100%;padding:9px 10px;border-radius:7px;border:1px solid var(--line);background:var(--bg);
+    font-family:'Inter',sans-serif;font-size:13.5px;color:var(--ink);
+  }
+  .field input:focus, .field select:focus{outline:2px solid var(--ink);outline-offset:1px;}
+  .modal-actions{display:flex;justify-content:space-between;align-items:center;margin-top:18px;}
+  .link-btn{all:unset;cursor:pointer;color:var(--accent);font-size:12px;font-weight:600;}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);
+    padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:60;}
+  .toast.show{opacity:1;}
+
+  /* ---------- calendar ---------- */
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .cal-nav{display:flex;gap:6px;align-items:center;}
+  .icon-btn{all:unset;cursor:pointer;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:7px;border:1px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .icon-btn:hover{background:var(--surface-alt);}
+  .cal-month-label{font-family:'Bebas Neue',sans-serif;font-size:20px;min-width:170px;text-align:center;text-transform:capitalize;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .cal-daylabel{font-size:11px;color:var(--ink-soft);text-align:center;padding-bottom:2px;font-family:'IBM Plex Mono',monospace;}
+  .cal-cell{background:var(--surface);border:1px solid var(--line);border-radius:8px;min-height:92px;padding:6px;display:flex;flex-direction:column;gap:3px;}
+  .cal-cell.other-month{opacity:0.35;}
+  .cal-cell .daynum{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-faint);}
+  .cal-item{font-size:10px;padding:2px 5px;border-radius:5px;color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  /* ---------- clients & ideas grids ---------- */
+  .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+  .entity-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:6px;}
+  .entity-card:hover{border-color:var(--ink-faint);}
+  .entity-card h4{font-size:16px;font-family:'Inter',sans-serif;font-weight:700;}
+  .entity-card .meta-line{font-size:11px;color:var(--ink-soft);}
+  .entity-card .stats{display:flex;gap:12px;margin-top:4px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-faint);}
+  .type-pill{align-self:flex-start;font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 7px;border-radius:5px;color:#fff;}
+  .entity-card .notes{font-size:12px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  textarea{width:100%;padding:9px 10px;border-radius:7px;border:1px solid var(--line);background:var(--bg);font-family:'Inter',sans-serif;font-size:13.5px;color:var(--ink);resize:vertical;min-height:60px;}
+  textarea:focus{outline:2px solid var(--ink);outline-offset:1px;}
+  .checkfield{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .checkfield input{width:auto;}
+  .blocked-flag{display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-weight:600;}
+  .blocked-flag .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;}
+
+  @media (max-width: 760px){
+    #app{flex-direction:column;}
+    .sidebar{width:100%;height:auto;position:relative;flex-direction:row;align-items:center;padding:16px 18px;}
+    .brand .tag, .sidebar-foot{display:none;}
+    nav{flex-direction:row;margin-left:auto;}
+    main{padding:20px;}
+    .stat-row{grid-template-columns:repeat(2,1fr);}
+    .panels{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="sidebar">
+    <div class="brand">
+      <h1>DELSUR</h1>
+      <div class="stripe"></div>
+      <div class="tag">Producción audiovisual</div>
+    </div>
+    <nav>
+      <button class="navbtn active" data-view="dashboard"><span class="n">01</span> Vistazo general</button>
+      <button class="navbtn" data-view="pipeline"><span class="n">02</span> Pipeline</button>
+      <button class="navbtn" data-view="calendar"><span class="n">03</span> Calendario</button>
+      <button class="navbtn" data-view="clients"><span class="n">04</span> Clientes</button>
+      <button class="navbtn" data-view="ideas"><span class="n">05</span> Banco de ideas</button>
+    </nav>
+    <div class="sidebar-foot" id="conn-status">Tablero compartido vía Supabase.</div>
+  </div>
+
+  <main>
+    <!-- DASHBOARD -->
+    <section class="view active" id="view-dashboard">
+      <div class="view-head">
+        <div>
+          <h2>Vistazo general</h2>
+          <div class="sub" id="today-label"></div>
+        </div>
+      </div>
+
+      <div class="stat-row" id="stat-row"></div>
+
+      <div class="panels">
+        <div class="panel">
+          <h3>Atrasado y esta semana</h3>
+          <div id="due-list"></div>
+        </div>
+        <div class="panel">
+          <h3>Carga por persona</h3>
+          <div id="load-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PIPELINE -->
+    <section class="view" id="view-pipeline">
+      <div class="view-head">
+        <div>
+          <h2>Pipeline de producción</h2>
+          <div class="sub">Arrastrá una tarjeta para cambiarla de etapa.</div>
+        </div>
+        <button class="btn accent" id="new-item-btn">+ Nueva pieza</button>
+      </div>
+      <div style="margin-bottom:10px;">
+        <button class="btn ghost" id="refresh-btn" style="font-size:12px;padding:6px 12px;">↻ Buscar cambios del equipo</button>
+      </div>
+      <div class="board" id="board"></div>
+    </section>
+
+    <!-- CALENDAR -->
+    <section class="view" id="view-calendar">
+      <div class="cal-head">
+        <div>
+          <h2>Calendario</h2>
+          <div class="sub">Piezas por fecha límite / publicación.</div>
+        </div>
+        <div class="cal-nav">
+          <button class="icon-btn" id="cal-prev">‹</button>
+          <div class="cal-month-label" id="cal-label"></div>
+          <button class="icon-btn" id="cal-next">›</button>
+        </div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </section>
+
+    <!-- CLIENTS -->
+    <section class="view" id="view-clients">
+      <div class="view-head">
+        <div>
+          <h2>Clientes</h2>
+          <div class="sub">Brief, plan y estado de cada cuenta.</div>
+        </div>
+        <button class="btn accent" id="new-client-btn">+ Nuevo cliente</button>
+      </div>
+      <div class="card-grid" id="client-grid"></div>
+    </section>
+
+    <!-- IDEAS -->
+    <section class="view" id="view-ideas">
+      <div class="view-head">
+        <div>
+          <h2>Banco de ideas</h2>
+          <div class="sub">Ideas, referencias y assets reutilizables, sin fecha todavía.</div>
+        </div>
+        <button class="btn accent" id="new-idea-btn">+ Nueva idea</button>
+      </div>
+      <div class="card-grid" id="idea-grid"></div>
+    </section>
+  </main>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h3 id="modal-title">Nueva pieza</h3>
+    <form id="item-form">
+      <div class="field">
+        <label>Cliente</label>
+        <input list="clients-list" id="f-client" required placeholder="Ej: RIQUITO">
+        <datalist id="clients-list"></datalist>
+      </div>
+      <div class="field">
+        <label>Título / descripción</label>
+        <input id="f-title" required placeholder="Ej: Reel spot the AI">
+      </div>
+      <div class="field">
+        <label>Formato</label>
+        <select id="f-format">
+          <option>Reel</option><option>Carrusel</option><option>Foto</option>
+          <option>Copy</option><option>Video</option><option>Story</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Responsable</label>
+        <input list="team-list" id="f-assignee" placeholder="Ej: Nacho">
+        <datalist id="team-list"></datalist>
+      </div>
+      <div class="field">
+        <label>Fecha límite</label>
+        <input type="date" id="f-due">
+      </div>
+      <div class="field">
+        <label>Carpeta / archivo (Drive)</label>
+        <input id="f-drive" placeholder="Link a la carpeta o archivo de esta pieza">
+      </div>
+      <div class="field">
+        <label>Etapa</label>
+        <select id="f-stage"></select>
+      </div>
+      <div class="field checkfield">
+        <input type="checkbox" id="f-blocked">
+        <label style="margin:0;text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink);">Bloqueada (esperando algo externo, ej. el cliente)</label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="link-btn" id="delete-btn" style="display:none;">Eliminar</button>
+        <div style="display:flex;gap:8px;margin-left:auto;">
+          <button type="button" class="btn ghost" id="cancel-btn">Cancelar</button>
+          <button type="submit" class="btn accent">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-client">
+  <div class="modal">
+    <h3 id="client-modal-title">Nuevo cliente</h3>
+    <form id="client-form">
+      <div class="field">
+        <label>Nombre</label>
+        <input id="c-name" required placeholder="Ej: RIQUITO">
+      </div>
+      <div class="field">
+        <label>Tono de marca</label>
+        <input id="c-tone" placeholder="Ej: cercano, con humor">
+      </div>
+      <div class="field">
+        <label>Colores</label>
+        <input id="c-colors" placeholder="Ej: rojo, negro, mostaza">
+      </div>
+      <div class="field">
+        <label>Qué evitar</label>
+        <input id="c-avoid" placeholder="Ej: textos largos, tono formal">
+      </div>
+      <div class="field">
+        <label>Plan contratado (piezas / mes)</label>
+        <input id="c-plan" placeholder="Ej: 8 piezas/mes">
+      </div>
+      <div class="field">
+        <label>Contacto</label>
+        <input id="c-contact" placeholder="Nombre y vía de contacto">
+      </div>
+      <div class="field">
+        <label>Redes / accesos</label>
+        <input id="c-socials" placeholder="Ej: @riquito, link a Drive">
+      </div>
+      <div class="field">
+        <label>Carpeta de Drive</label>
+        <input id="c-drive" placeholder="Pegá el link de la carpeta del cliente">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="link-btn" id="client-delete-btn" style="display:none;">Eliminar</button>
+        <div style="display:flex;gap:8px;margin-left:auto;">
+          <button type="button" class="btn ghost" id="client-cancel-btn">Cancelar</button>
+          <button type="submit" class="btn accent">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-idea">
+  <div class="modal">
+    <h3 id="idea-modal-title">Nueva idea</h3>
+    <form id="idea-form">
+      <div class="field">
+        <label>Título</label>
+        <input id="i-title" required placeholder="Ej: Trend spot the AI">
+      </div>
+      <div class="field">
+        <label>Tipo</label>
+        <select id="i-type">
+          <option value="idea">Idea</option>
+          <option value="referencia">Referencia</option>
+          <option value="asset">Asset reutilizable</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Cliente (opcional)</label>
+        <input list="clients-list" id="i-client" placeholder="Dejalo vacío si es general">
+      </div>
+      <div class="field">
+        <label>Notas</label>
+        <textarea id="i-notes" placeholder="Detalle, contexto, por qué sirve"></textarea>
+      </div>
+      <div class="field">
+        <label>Link (opcional)</label>
+        <input id="i-link" placeholder="Referencia, Drive, etc.">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="link-btn" id="idea-delete-btn" style="display:none;">Eliminar</button>
+        <div style="display:flex;gap:8px;margin-left:auto;">
+          <button type="button" class="btn ghost" id="idea-cancel-btn">Cancelar</button>
+          <button type="submit" class="btn accent">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STAGES = [
+  {key:'idea', label:'Idea', color:'var(--s-idea)'},
+  {key:'guion', label:'Guion', color:'var(--s-guion)'},
+  {key:'grabacion', label:'Grabación', color:'var(--s-grabacion)'},
+  {key:'edicion', label:'Edición', color:'var(--s-edicion)'},
+  {key:'revision', label:'Revisión interna', color:'var(--s-revision)'},
+  {key:'aprobacion', label:'Aprobación cliente', color:'var(--s-aprobacion)'},
+  {key:'publicado', label:'Publicado', color:'var(--s-publicado)'},
+];
+const stageIndex = k => STAGES.findIndex(s => s.key === k);
+const stageColor = k => (STAGES.find(s => s.key === k) || {}).color || 'var(--ink)';
+const stageLabel = k => (STAGES.find(s => s.key === k) || {}).label || k;
+
+/* =====================================================================
+   CONFIGURACIÓN — completar antes de subir a GitHub / publicar
+   1) Creá un proyecto en https://supabase.com y corré el SQL de la tabla
+      "board" (ver README del repo)
+   2) Andá a Settings → API y copiá la Project URL y la anon public key
+   3) Pegá los dos valores acá abajo, entre comillas
+   ===================================================================== */
+const SUPABASE_URL = 'https://tzrgsezhfcyawwgzcydp.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_EMi6bmJIdDOepwC3QyaQqg_mbi9EAGc';
+/* ===================================================================== */
+
+let state = { items: [], clients: [], team: [], clientProfiles: {}, ideas: [] };
+let editingId = null;
+let editingClient = null;
+let editingIdea = null;
+let calDate = new Date();
+
+/* ---------- Supabase storage ---------- */
+function hasConfig(){
+  return SUPABASE_URL && SUPABASE_ANON_KEY
+    && SUPABASE_URL !== 'PEGA_TU_URL_DE_SUPABASE_ACA'
+    && SUPABASE_ANON_KEY !== 'PEGA_TU_ANON_KEY_ACA';
+}
+function sbHeaders(extra){
+  return Object.assign({
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+  }, extra || {});
+}
+
+async function sbGetState(){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/board?select=data&id=eq.1`, {
+    headers: sbHeaders({ Accept: 'application/json' })
+  });
+  if(!res.ok) throw new Error('fetch-failed-' + res.status);
+  const rows = await res.json();
+  return rows.length ? rows[0].data : null;
+}
+async function sbSetState(data){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/board?id=eq.1`, {
+    method: 'PATCH',
+    headers: sbHeaders({ 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }),
+    body: JSON.stringify({ data })
+  });
+  if(!res.ok) throw new Error('save-failed-' + res.status);
+}
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+async function loadState(){
+  const statusEl = document.getElementById('conn-status');
+  if(!hasConfig()){
+    statusEl.textContent = '⚠ Sin configurar: completá SUPABASE_URL y SUPABASE_ANON_KEY en el código.';
+    statusEl.style.color = 'var(--accent)';
+    renderAll();
+    return;
+  }
+  try{
+    const data = await sbGetState();
+    if(data){ state = data; }
+    statusEl.textContent = 'Conectado ✓';
+  }catch(e){
+    statusEl.textContent = '⚠ No se pudo conectar con Supabase.';
+    statusEl.style.color = 'var(--accent)';
+  }
+  if(!state.items) state.items = [];
+  if(!state.clients) state.clients = [];
+  if(!state.team) state.team = [];
+  if(!state.clientProfiles) state.clientProfiles = {};
+  if(!state.ideas) state.ideas = [];
+  renderAll();
+}
+
+async function saveState(){
+  if(!hasConfig()){ showToast('Falta configurar SUPABASE_URL y SUPABASE_ANON_KEY en el código.'); return false; }
+  try{
+    await sbSetState(state);
+    return true;
+  }catch(e){
+    showToast('No se pudo guardar en Supabase. Probá de nuevo en un momento.');
+    return false;
+  }
+}
+
+/* refetch periodically so the team sees each other's changes without reloading */
+setInterval(async () => {
+  if(!hasConfig()) return;
+  try{
+    const data = await sbGetState();
+    if(data && JSON.stringify(data) !== JSON.stringify(state)){
+      state = data;
+      renderAll();
+    }
+  }catch(e){ /* silent — next poll will retry */ }
+}, 15000);
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* ---------- nav ---------- */
+document.querySelectorAll('.navbtn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-' + btn.dataset.view).classList.add('active');
+  });
+});
+
+/* ---------- date helpers ---------- */
+/* usa la fecha LOCAL (no toISOString, que convierte a UTC y en Argentina
+   corre el día una hora antes de tiempo entre ~21:00 y medianoche) */
+function toLocalDateStr(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function todayStr(){ return toLocalDateStr(new Date()); }
+function daysDiff(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  const t = new Date(todayStr() + 'T00:00:00');
+  return Math.round((d - t) / 86400000);
+}
+function fmtDate(dateStr){
+  if(!dateStr) return '—';
+  const [y,m,d] = dateStr.split('-');
+  return `${d}/${m}`;
+}
+
+/* ---------- render: dashboard ---------- */
+function renderDashboard(){
+  document.getElementById('today-label').textContent = new Date().toLocaleDateString('es-AR', {weekday:'long', day:'numeric', month:'long'});
+
+  const items = state.items;
+  const active = items.filter(i => i.stage !== 'publicado');
+  const late = active.filter(i => i.due && daysDiff(i.due) < 0);
+  const soon = active.filter(i => i.due && daysDiff(i.due) >= 0 && daysDiff(i.due) <= 7);
+  const waitingClient = items.filter(i => i.stage === 'aprobacion');
+  const blocked = active.filter(i => i.blocked);
+
+  const statRow = document.getElementById('stat-row');
+  statRow.innerHTML = `
+    <div class="stat-card"><div class="num">${active.length}</div><div class="lbl">Piezas en curso</div></div>
+    <div class="stat-card ${late.length ? 'warn' : ''}"><div class="num">${late.length}</div><div class="lbl">Atrasadas</div></div>
+    <div class="stat-card"><div class="num">${soon.length}</div><div class="lbl">Vencen esta semana</div></div>
+    <div class="stat-card"><div class="num">${waitingClient.length}</div><div class="lbl">Esperando aprobación</div></div>
+    <div class="stat-card ${blocked.length ? 'warn' : ''}"><div class="num">${blocked.length}</div><div class="lbl">Bloqueadas</div></div>
+  `;
+
+  const dueList = document.getElementById('due-list');
+  const dueItems = [...late, ...soon].sort((a,b)=> (a.due||'').localeCompare(b.due||''));
+  dueList.innerHTML = dueItems.length ? dueItems.map(i => `
+    <div class="row-item">
+      <span class="client">${esc(i.client)}</span>
+      <span class="title">${esc(i.title)}</span>
+      <span class="tag" style="background:${stageColor(i.stage)}">${stageLabel(i.stage)}</span>
+      <span class="due ${daysDiff(i.due) < 0 ? 'late' : ''}">${fmtDate(i.due)}</span>
+    </div>
+  `).join('') : `<div class="empty">Nada atrasado ni por vencer. Al día.</div>`;
+
+  const loadList = document.getElementById('load-list');
+  const byPerson = {};
+  active.forEach(i => { if(i.assignee){ byPerson[i.assignee] = (byPerson[i.assignee]||0) + 1; } });
+  const maxLoad = Math.max(1, ...Object.values(byPerson));
+  const names = Object.keys(byPerson).sort((a,b)=>byPerson[b]-byPerson[a]);
+  loadList.innerHTML = names.length ? names.map(n => `
+    <div class="load-row">
+      <span class="name">${esc(n)}</span>
+      <div class="load-bar"><div style="width:${(byPerson[n]/maxLoad*100)}%"></div></div>
+      <span class="cnt">${byPerson[n]}</span>
+    </div>
+  `).join('') : `<div class="empty">Todavía no hay piezas asignadas.</div>`;
+}
+
+/* ---------- render: pipeline ---------- */
+function renderBoard(){
+  const board = document.getElementById('board');
+  board.innerHTML = STAGES.map((s, idx) => {
+    const colItems = state.items.filter(i => i.stage === s.key);
+    return `
+      <div class="column">
+        <div class="col-head" style="--stage-color:${s.color}">
+          <span class="n">${String(idx+1).padStart(2,'0')} · ${colItems.length}</span>
+          <span class="t">${s.label}</span>
+        </div>
+        <div class="col-body" data-stage="${s.key}">
+          ${colItems.map(cardHtml).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.querySelectorAll('.card').forEach(card=>{
+    card.addEventListener('dragstart', e=>{
+      e.dataTransfer.setData('text/plain', card.dataset.id);
+    });
+    card.addEventListener('click', ()=> openModal(card.dataset.id));
+  });
+  document.querySelectorAll('.col-body').forEach(col=>{
+    col.addEventListener('dragover', e=>{ e.preventDefault(); col.classList.add('dragover'); });
+    col.addEventListener('dragleave', ()=> col.classList.remove('dragover'));
+    col.addEventListener('drop', e=>{
+      e.preventDefault();
+      col.classList.remove('dragover');
+      const id = e.dataTransfer.getData('text/plain');
+      const item = state.items.find(i => i.id === id);
+      if(item){ item.stage = col.dataset.stage; saveState(); renderAll(); }
+    });
+  });
+}
+
+function cardHtml(i){
+  const late = i.due && daysDiff(i.due) < 0 && i.stage !== 'publicado';
+  return `
+    <div class="card" draggable="true" data-id="${i.id}">
+      <div class="client">${esc(i.client)} ${i.blocked ? '<span class="blocked-flag" title="Bloqueada"><span class="dot"></span>bloqueada</span>' : ''}</div>
+      <div class="title">${esc(i.title)}</div>
+      <div class="meta">
+        <span>${esc(i.format || '')}${i.assignee ? ' · ' + esc(i.assignee) : ''}</span>
+        <span class="due ${late ? 'late' : ''}">${fmtDate(i.due)}</span>
+      </div>
+      ${i.drive ? `<a href="${esc(normalizeUrl(i.drive))}" target="_blank" rel="noopener" class="drive-link" onclick="event.stopPropagation()">Ver en Drive ↗</a>` : ''}
+    </div>
+  `;
+}
+
+function esc(s){ const d=document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+/* si pegan un link de Drive sin "https://" (muy común), lo completa,
+   así el botón no intenta navegar a una ruta relativa rota */
+function normalizeUrl(url){
+  if(!url) return '';
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
+function renderAll(){
+  renderDashboard();
+  renderBoard();
+  renderCalendar();
+  renderClients();
+  renderIdeas();
+  refreshDatalists();
+}
+
+/* ---------- render: calendar ---------- */
+const DAY_LABELS = ['L','M','X','J','V','S','D'];
+function renderCalendar(){
+  const year = calDate.getFullYear();
+  const month = calDate.getMonth();
+  document.getElementById('cal-label').textContent = calDate.toLocaleDateString('es-AR', {month:'long', year:'numeric'});
+
+  const firstOfMonth = new Date(year, month, 1);
+  let startOffset = firstOfMonth.getDay() - 1; // Monday-first
+  if(startOffset < 0) startOffset = 6;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+
+  const itemsByDate = {};
+  state.items.forEach(i => { if(i.due){ (itemsByDate[i.due] = itemsByDate[i.due] || []).push(i); } });
+
+  let html = DAY_LABELS.map(l => `<div class="cal-daylabel">${l}</div>`).join('');
+  for(let c = 0; c < totalCells; c++){
+    const dayNum = c - startOffset + 1;
+    let cellDate, otherMonth = false;
+    if(dayNum < 1){ cellDate = new Date(year, month - 1, daysInPrevMonth + dayNum); otherMonth = true; }
+    else if(dayNum > daysInMonth){ cellDate = new Date(year, month + 1, dayNum - daysInMonth); otherMonth = true; }
+    else { cellDate = new Date(year, month, dayNum); }
+    const dateStr = toLocalDateStr(cellDate);
+    const dayItems = itemsByDate[dateStr] || [];
+    html += `
+      <div class="cal-cell ${otherMonth ? 'other-month' : ''}">
+        <span class="daynum">${cellDate.getDate()}</span>
+        ${dayItems.map(i => `<div class="cal-item" style="background:${stageColor(i.stage)}" data-id="${i.id}" title="${esc(i.client)} — ${esc(i.title)}">${esc(i.client)}: ${esc(i.title)}</div>`).join('')}
+      </div>
+    `;
+  }
+  document.getElementById('cal-grid').innerHTML = html;
+  document.querySelectorAll('.cal-item').forEach(el => {
+    el.addEventListener('click', () => openModal(el.dataset.id));
+  });
+}
+document.getElementById('cal-prev').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()-1); renderCalendar(); });
+document.getElementById('cal-next').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()+1); renderCalendar(); });
+
+/* ---------- render: clients ---------- */
+function renderClients(){
+  const grid = document.getElementById('client-grid');
+  const names = [...new Set(state.clients)];
+  if(!names.length){ grid.innerHTML = `<div class="panel empty">Todavía no cargaste clientes. Se suman solos al crear una pieza, o con "+ Nuevo cliente".</div>`; return; }
+  grid.innerHTML = names.map(name => {
+    const profile = state.clientProfiles[name] || {};
+    const items = state.items.filter(i => i.client === name);
+    const activos = items.filter(i => i.stage !== 'publicado').length;
+    const publicados = items.filter(i => i.stage === 'publicado').length;
+    return `
+      <div class="entity-card" data-name="${esc(name)}">
+        <h4>${esc(name)}</h4>
+        <div class="meta-line">${esc(profile.plan || 'Sin plan cargado')}</div>
+        ${profile.tone ? `<div class="meta-line">Tono: ${esc(profile.tone)}</div>` : ''}
+        <div class="stats"><span>${activos} activas</span><span>${publicados} publicadas</span></div>
+        ${profile.drive ? `<a href="${esc(normalizeUrl(profile.drive))}" target="_blank" rel="noopener" class="drive-link" onclick="event.stopPropagation()">Abrir carpeta ↗</a>` : ''}
+      </div>
+    `;
+  }).join('');
+  grid.querySelectorAll('.entity-card').forEach(card => {
+    card.addEventListener('click', () => openClientModal(card.dataset.name));
+  });
+}
+
+/* ---------- render: ideas ---------- */
+const IDEA_TYPE_COLOR = { idea:'var(--s-idea)', referencia:'var(--s-revision)', asset:'var(--s-aprobacion)' };
+const IDEA_TYPE_LABEL = { idea:'Idea', referencia:'Referencia', asset:'Asset' };
+function renderIdeas(){
+  const grid = document.getElementById('idea-grid');
+  if(!state.ideas.length){ grid.innerHTML = `<div class="panel empty">Todavía no hay nada acá. Sumá ideas sueltas, referencias o assets reutilizables con "+ Nueva idea".</div>`; return; }
+  grid.innerHTML = state.ideas.map(idea => `
+    <div class="entity-card" data-id="${idea.id}">
+      <span class="type-pill" style="background:${IDEA_TYPE_COLOR[idea.type] || 'var(--ink)'}">${IDEA_TYPE_LABEL[idea.type] || idea.type}</span>
+      <h4>${esc(idea.title)}</h4>
+      ${idea.client ? `<div class="meta-line">${esc(idea.client)}</div>` : ''}
+      ${idea.notes ? `<div class="notes">${esc(idea.notes)}</div>` : ''}
+      ${idea.link ? `<a href="${esc(normalizeUrl(idea.link))}" target="_blank" rel="noopener" class="drive-link" onclick="event.stopPropagation()">Abrir link ↗</a>` : ''}
+    </div>
+  `).join('');
+  grid.querySelectorAll('.entity-card').forEach(card => {
+    card.addEventListener('click', () => openIdeaModal(card.dataset.id));
+  });
+}
+
+function refreshDatalists(){
+  document.getElementById('clients-list').innerHTML = [...new Set(state.clients)].map(c=>`<option value="${esc(c)}">`).join('');
+  document.getElementById('team-list').innerHTML = [...new Set(state.team)].map(t=>`<option value="${esc(t)}">`).join('');
+}
+/* las opciones de etapa no cambian nunca, así que se cargan una sola vez.
+   Si se recargaran en cada render, un sync automático mientras el modal
+   está abierto reseteaba la selección del usuario a "Idea" sin avisar. */
+function initStageSelect(){
+  document.getElementById('f-stage').innerHTML = STAGES.map(s=>`<option value="${s.key}">${s.label}</option>`).join('');
+}
+
+/* ---------- modal ---------- */
+const overlay = document.getElementById('overlay');
+document.getElementById('new-item-btn').addEventListener('click', ()=> openModal(null));
+document.getElementById('cancel-btn').addEventListener('click', closeModal);
+overlay.addEventListener('click', e=>{ if(e.target === overlay) closeModal(); });
+
+function openModal(id){
+  editingId = id;
+  const item = id ? state.items.find(i=>i.id===id) : null;
+  document.getElementById('modal-title').textContent = item ? 'Editar pieza' : 'Nueva pieza';
+  document.getElementById('f-client').value = item ? item.client : '';
+  document.getElementById('f-title').value = item ? item.title : '';
+  document.getElementById('f-format').value = item ? item.format : 'Reel';
+  document.getElementById('f-assignee').value = item ? item.assignee : '';
+  document.getElementById('f-due').value = item ? (item.due || '') : '';
+  document.getElementById('f-drive').value = item ? (item.drive || '') : '';
+  document.getElementById('f-stage').value = item ? item.stage : 'idea';
+  document.getElementById('f-blocked').checked = item ? !!item.blocked : false;
+  document.getElementById('delete-btn').style.display = item ? 'inline' : 'none';
+  overlay.classList.add('open');
+  document.getElementById('f-client').focus();
+}
+function closeModal(){ overlay.classList.remove('open'); editingId = null; }
+
+document.getElementById('item-form').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const client = document.getElementById('f-client').value.trim();
+  const title = document.getElementById('f-title').value.trim();
+  const format = document.getElementById('f-format').value;
+  const assignee = document.getElementById('f-assignee').value.trim();
+  const due = document.getElementById('f-due').value;
+  const drive = document.getElementById('f-drive').value.trim();
+  const stage = document.getElementById('f-stage').value;
+  const blocked = document.getElementById('f-blocked').checked;
+  if(!client || !title) return;
+
+  if(editingId){
+    const item = state.items.find(i=>i.id===editingId);
+    Object.assign(item, {client, title, format, assignee, due, stage, blocked, drive});
+  } else {
+    state.items.push({id: uid(), client, title, format, assignee, due, stage, blocked, drive});
+  }
+  if(client && !state.clients.includes(client)) state.clients.push(client);
+  if(assignee && !state.team.includes(assignee)) state.team.push(assignee);
+
+  saveState().then(ok => { if(ok) showToast('Guardado'); });
+  renderAll();
+  closeModal();
+});
+
+document.getElementById('delete-btn').addEventListener('click', ()=>{
+  if(!editingId) return;
+  state.items = state.items.filter(i=>i.id!==editingId);
+  saveState();
+  renderAll();
+  closeModal();
+  showToast('Eliminado');
+});
+
+/* ---------- client modal ---------- */
+const overlayClient = document.getElementById('overlay-client');
+document.getElementById('new-client-btn').addEventListener('click', () => openClientModal(null));
+document.getElementById('client-cancel-btn').addEventListener('click', closeClientModal);
+overlayClient.addEventListener('click', e => { if(e.target === overlayClient) closeClientModal(); });
+
+function openClientModal(name){
+  editingClient = name;
+  const profile = name ? (state.clientProfiles[name] || {}) : {};
+  document.getElementById('client-modal-title').textContent = name ? 'Editar cliente' : 'Nuevo cliente';
+  const nameInput = document.getElementById('c-name');
+  nameInput.value = name || '';
+  nameInput.disabled = !!name;
+  document.getElementById('c-tone').value = profile.tone || '';
+  document.getElementById('c-colors').value = profile.colors || '';
+  document.getElementById('c-avoid').value = profile.avoid || '';
+  document.getElementById('c-plan').value = profile.plan || '';
+  document.getElementById('c-contact').value = profile.contact || '';
+  document.getElementById('c-socials').value = profile.socials || '';
+  document.getElementById('c-drive').value = profile.drive || '';
+  document.getElementById('client-delete-btn').style.display = name ? 'inline' : 'none';
+  overlayClient.classList.add('open');
+  nameInput.focus();
+}
+function closeClientModal(){ overlayClient.classList.remove('open'); editingClient = null; }
+
+document.getElementById('client-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = document.getElementById('c-name').value.trim();
+  if(!name) return;
+  state.clientProfiles[name] = {
+    tone: document.getElementById('c-tone').value.trim(),
+    colors: document.getElementById('c-colors').value.trim(),
+    avoid: document.getElementById('c-avoid').value.trim(),
+    plan: document.getElementById('c-plan').value.trim(),
+    contact: document.getElementById('c-contact').value.trim(),
+    socials: document.getElementById('c-socials').value.trim(),
+    drive: document.getElementById('c-drive').value.trim(),
+  };
+  if(!state.clients.includes(name)) state.clients.push(name);
+  saveState().then(ok => { if(ok) showToast('Guardado'); });
+  renderAll();
+  closeClientModal();
+});
+
+document.getElementById('client-delete-btn').addEventListener('click', () => {
+  if(!editingClient) return;
+  delete state.clientProfiles[editingClient];
+  state.clients = state.clients.filter(c => c !== editingClient);
+  saveState();
+  renderAll();
+  closeClientModal();
+  showToast('Cliente eliminado (las piezas ya cargadas se mantienen)');
+});
+
+/* ---------- idea modal ---------- */
+const overlayIdea = document.getElementById('overlay-idea');
+document.getElementById('new-idea-btn').addEventListener('click', () => openIdeaModal(null));
+document.getElementById('idea-cancel-btn').addEventListener('click', closeIdeaModal);
+overlayIdea.addEventListener('click', e => { if(e.target === overlayIdea) closeIdeaModal(); });
+
+function openIdeaModal(id){
+  editingIdea = id;
+  const idea = id ? state.ideas.find(x => x.id === id) : null;
+  document.getElementById('idea-modal-title').textContent = idea ? 'Editar idea' : 'Nueva idea';
+  document.getElementById('i-title').value = idea ? idea.title : '';
+  document.getElementById('i-type').value = idea ? idea.type : 'idea';
+  document.getElementById('i-client').value = idea ? (idea.client || '') : '';
+  document.getElementById('i-notes').value = idea ? (idea.notes || '') : '';
+  document.getElementById('i-link').value = idea ? (idea.link || '') : '';
+  document.getElementById('idea-delete-btn').style.display = idea ? 'inline' : 'none';
+  overlayIdea.classList.add('open');
+  document.getElementById('i-title').focus();
+}
+function closeIdeaModal(){ overlayIdea.classList.remove('open'); editingIdea = null; }
+
+document.getElementById('idea-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const title = document.getElementById('i-title').value.trim();
+  if(!title) return;
+  const data = {
+    title,
+    type: document.getElementById('i-type').value,
+    client: document.getElementById('i-client').value.trim(),
+    notes: document.getElementById('i-notes').value.trim(),
+    link: document.getElementById('i-link').value.trim(),
+  };
+  if(editingIdea){
+    Object.assign(state.ideas.find(x => x.id === editingIdea), data);
+  } else {
+    state.ideas.push({id: uid(), ...data});
+  }
+  saveState().then(ok => { if(ok) showToast('Guardado'); });
+  renderAll();
+  closeIdeaModal();
+});
+
+document.getElementById('idea-delete-btn').addEventListener('click', () => {
+  if(!editingIdea) return;
+  state.ideas = state.ideas.filter(x => x.id !== editingIdea);
+  saveState();
+  renderAll();
+  closeIdeaModal();
+  showToast('Eliminado');
+});
+
+document.getElementById('refresh-btn').addEventListener('click', async () => {
+  if(!hasConfig()){ showToast('Falta configurar SUPABASE_URL y SUPABASE_ANON_KEY en el código.'); return; }
+  try{
+    const data = await sbGetState();
+    if(data){ state = data; renderAll(); showToast('Actualizado'); }
+  }catch(e){ showToast('No se pudo actualizar. Revisá la conexión.'); }
+});
+
+initStageSelect();
+loadState();
+</script>
+</body>
+</html>
