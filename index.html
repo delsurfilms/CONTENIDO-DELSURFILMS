@@ -155,6 +155,23 @@
   .overlay.open{display:flex;}
   .modal{background:var(--surface);border-radius:14px;width:420px;max-width:100%;padding:24px;max-height:88vh;overflow-y:auto;}
   .modal h3{font-size:20px;margin-bottom:16px;}
+  /* modal de pieza: dos columnas (formulario + panel visual) */
+  .modal-item{width:auto;max-width:900px;display:flex;gap:22px;align-items:flex-start;}
+  .modal-item .modal-form-col{flex:1 1 340px;min-width:300px;max-width:380px;}
+  .visual-panel{flex:1 1 320px;min-width:280px;border:1px solid var(--line);border-radius:10px;overflow:hidden;position:sticky;top:0;background:var(--surface);}
+  @media (max-width:860px){
+    .modal-item{flex-direction:column;max-height:88vh;overflow-y:auto;}
+    .modal-item .modal-form-col{max-width:100%;}
+    .visual-panel{width:100%;position:static;}
+  }
+  .vp-row{display:grid;grid-template-columns:150px 1fr;border-bottom:1px solid var(--line);}
+  .vp-row:last-child{border-bottom:none;}
+  .vp-label{padding:9px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;color:var(--ink-soft);background:var(--surface-alt);border-right:1px solid var(--line);display:flex;align-items:center;}
+  .vp-value{padding:9px 12px;font-size:13px;color:var(--ink);display:flex;align-items:center;word-break:break-word;line-height:1.35;}
+  .vp-value.empty{color:var(--ink-faint);font-style:italic;}
+  .vp-row.vp-image .vp-value{padding:8px;}
+  .vp-row.vp-image img{width:100%;max-height:230px;object-fit:cover;border-radius:6px;display:block;}
+  .vp-row.vp-image .vp-value.empty{padding:9px 12px;}
   .field{margin-bottom:14px;}
   .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);margin-bottom:5px;}
   .field input, .field select{
@@ -180,7 +197,9 @@
   .cal-cell{background:var(--surface);border:1px solid var(--line);border-radius:8px;min-height:92px;padding:6px;display:flex;flex-direction:column;gap:3px;}
   .cal-cell.other-month{opacity:0.35;}
   .cal-cell .daynum{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-faint);}
-  .cal-item{font-size:10px;padding:2px 5px;border-radius:5px;color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cal-item{font-size:10px;padding:3px 5px;border-radius:5px;color:#fff;cursor:pointer;overflow:hidden;}
+  .cal-item-thumb{width:100%;height:40px;object-fit:cover;border-radius:4px;display:block;margin-bottom:3px;}
+  .cal-item-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;}
 
   /* ---------- clients & ideas grids ---------- */
   .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
@@ -352,62 +371,73 @@
 </div>
 
 <div class="overlay" id="overlay">
-  <div class="modal">
-    <h3 id="modal-title">Nueva pieza</h3>
-    <form id="item-form">
-      <div class="field">
-        <label>Cliente</label>
-        <input list="clients-list" id="f-client" required placeholder="Ej: RIQUITO">
-        <datalist id="clients-list"></datalist>
-      </div>
-      <div class="field">
-        <label>Título / descripción</label>
-        <input id="f-title" required placeholder="Ej: Reel spot the AI">
-      </div>
-      <div class="field">
-        <label>Formato</label>
-        <select id="f-format">
-          <option>Reel</option><option>Carrusel</option><option>Foto</option>
-          <option>Copy</option><option>Video</option><option>Story</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Responsable</label>
-        <input list="team-list" id="f-assignee" placeholder="Ej: Nacho">
-        <datalist id="team-list"></datalist>
-      </div>
-      <div class="field">
-        <label>Fecha límite</label>
-        <input type="date" id="f-due">
-      </div>
-      <div class="field">
-        <label>Carpeta / archivo (Drive)</label>
-        <input id="f-drive" placeholder="Link a la carpeta o archivo de esta pieza">
-      </div>
-      <div class="field">
-        <label>Imágenes de referencia</label>
-        <div class="img-field" id="f-images-field">
-          <button type="button" class="img-add-btn" id="img-add-btn">+</button>
-          <button type="button" class="img-paste-btn" id="img-paste-btn">📋 Pegar imagen</button>
+  <div class="modal modal-item">
+    <div class="modal-form-col">
+      <h3 id="modal-title">Nueva pieza</h3>
+      <form id="item-form">
+        <div class="field">
+          <label>Cliente</label>
+          <input list="clients-list" id="f-client" required placeholder="Ej: RIQUITO">
+          <datalist id="clients-list"></datalist>
         </div>
-        <input type="file" id="f-images-input" accept="image/*" multiple style="display:none;">
-      </div>
-      <div class="field">
-        <label>Etapa</label>
-        <select id="f-stage"></select>
-      </div>
-      <div class="field checkfield">
-        <input type="checkbox" id="f-blocked">
-        <label style="margin:0;text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink);">Bloqueada (esperando algo externo, ej. el cliente)</label>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="link-btn" id="delete-btn" style="display:none;">Eliminar</button>
-        <div style="display:flex;gap:8px;margin-left:auto;">
-          <button type="button" class="btn ghost" id="cancel-btn">Cancelar</button>
-          <button type="submit" class="btn accent">Guardar</button>
+        <div class="field">
+          <label>Título / descripción</label>
+          <input id="f-title" required placeholder="Ej: Reel spot the AI">
         </div>
-      </div>
-    </form>
+        <div class="field">
+          <label>Formato</label>
+          <select id="f-format">
+            <option>Reel</option><option>Carrusel</option><option>Foto</option>
+            <option>Copy</option><option>Video</option><option>Story</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Responsable</label>
+          <input list="team-list" id="f-assignee" placeholder="Ej: Nacho">
+          <datalist id="team-list"></datalist>
+        </div>
+        <div class="field">
+          <label>Fecha límite</label>
+          <input type="date" id="f-due">
+        </div>
+        <div class="field">
+          <label>Carpeta / archivo (Drive)</label>
+          <input id="f-drive" placeholder="Link a la carpeta o archivo de esta pieza">
+        </div>
+        <div class="field">
+          <label>Imágenes de referencia</label>
+          <div class="img-field" id="f-images-field">
+            <button type="button" class="img-add-btn" id="img-add-btn">+</button>
+            <button type="button" class="img-paste-btn" id="img-paste-btn">📋 Pegar imagen</button>
+          </div>
+          <input type="file" id="f-images-input" accept="image/*" multiple style="display:none;">
+        </div>
+        <div class="field">
+          <label>CTA (call to action)</label>
+          <input id="f-cta" placeholder="Ej: Pedilo por la app">
+        </div>
+        <div class="field">
+          <label>Copy final</label>
+          <textarea id="f-copy" placeholder="Texto final para la publicación"></textarea>
+        </div>
+        <div class="field">
+          <label>Etapa</label>
+          <select id="f-stage"></select>
+        </div>
+        <div class="field checkfield">
+          <input type="checkbox" id="f-blocked">
+          <label style="margin:0;text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink);">Bloqueada (esperando algo externo, ej. el cliente)</label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="link-btn" id="delete-btn" style="display:none;">Eliminar</button>
+          <div style="display:flex;gap:8px;margin-left:auto;">
+            <button type="button" class="btn ghost" id="cancel-btn">Cancelar</button>
+            <button type="submit" class="btn accent">Guardar</button>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="visual-panel" id="visual-panel"></div>
   </div>
 </div>
 
@@ -876,7 +906,12 @@ function renderCalendar(){
     html += `
       <div class="cal-cell ${otherMonth ? 'other-month' : ''}">
         <span class="daynum">${cellDate.getDate()}</span>
-        ${dayItems.map(i => `<div class="cal-item" style="background:${stageColor(i.stage)}" data-id="${i.id}" title="${esc(i.client)} — ${esc(i.title)}">${esc(i.client)}: ${esc(i.title)}</div>`).join('')}
+        ${dayItems.map(i => `
+          <div class="cal-item" style="background:${stageColor(i.stage)}" data-id="${i.id}" title="${esc(i.client)} — ${esc(i.title)}">
+            ${i.images && i.images.length ? `<img class="cal-item-thumb" src="${esc(i.images[0])}" loading="lazy" alt="">` : ''}
+            <span class="cal-item-text">${esc(i.client)}: ${esc(i.title)}</span>
+          </div>
+        `).join('')}
       </div>
     `;
   }
@@ -961,15 +996,59 @@ function openModal(id){
   document.getElementById('f-assignee').value = item ? item.assignee : '';
   document.getElementById('f-due').value = item ? (item.due || '') : '';
   document.getElementById('f-drive').value = item ? (item.drive || '') : '';
+  document.getElementById('f-cta').value = item ? (item.cta || '') : '';
+  document.getElementById('f-copy').value = item ? (item.copyFinal || '') : '';
   document.getElementById('f-stage').value = item ? item.stage : 'idea';
   document.getElementById('f-blocked').checked = item ? !!item.blocked : false;
   document.getElementById('delete-btn').style.display = item ? 'inline' : 'none';
   modalImages = (item && item.images ? item.images : []).map(url => ({id: uid(), url, uploading:false}));
   renderImgField();
+  renderVisualPanel();
   overlay.classList.add('open');
   document.getElementById('f-client').focus();
 }
 function closeModal(){ overlay.classList.remove('open'); editingId = null; isNewItem = false; modalImages = []; }
+
+/* ---------- panel visual (vista tipo ficha, al costado del formulario) ----------
+   Se actualiza en vivo con cada cambio del formulario y con cada imagen
+   agregada/quitada, para que siempre refleje lo que se está por guardar. */
+function renderVisualPanel(){
+  const panel = document.getElementById('visual-panel');
+  if(!panel) return;
+  const client = document.getElementById('f-client').value.trim();
+  const title = document.getElementById('f-title').value.trim();
+  const format = document.getElementById('f-format').value;
+  const assignee = document.getElementById('f-assignee').value.trim();
+  const due = document.getElementById('f-due').value;
+  const cta = document.getElementById('f-cta').value.trim();
+  const copyFinal = document.getElementById('f-copy').value.trim();
+  const stage = document.getElementById('f-stage').value;
+  const imgUrl = modalImages.find(m => !m.uploading && m.url) ? modalImages.find(m => !m.uploading && m.url).url : '';
+
+  const row = (label, value, opts={}) => `
+    <div class="vp-row ${opts.cls || ''}">
+      <div class="vp-label">${label}</div>
+      <div class="vp-value ${value ? '' : 'empty'}">${value || opts.emptyText || 'Sin cargar'}</div>
+    </div>`;
+
+  panel.innerHTML = `
+    ${row('Fecha límite o de subida', due ? fmtDate(due) : '')}
+    ${row('Cliente', esc(client))}
+    ${row('Título / idea principal', esc(title))}
+    ${row('Formato', esc(format))}
+    ${row('Responsable', esc(assignee))}
+    <div class="vp-row vp-image">
+      <div class="vp-label">Imagen / recurso visual</div>
+      <div class="vp-value ${imgUrl ? '' : 'empty'}">${imgUrl ? `<img src="${esc(imgUrl)}" alt="">` : 'Sin imagen cargada'}</div>
+    </div>
+    ${row('CTA (call to action)', esc(cta))}
+    ${row('Copy final', esc(copyFinal))}
+    ${row('Estado / etapa', esc(stageLabel(stage)))}
+  `;
+}
+/* recalcula el panel ante cualquier cambio en el formulario, mientras el modal esté abierto */
+document.getElementById('item-form').addEventListener('input', () => { if(overlay.classList.contains('open')) renderVisualPanel(); });
+document.getElementById('item-form').addEventListener('change', () => { if(overlay.classList.contains('open')) renderVisualPanel(); });
 
 /* ---------- imágenes de referencia dentro del modal ---------- */
 function renderImgField(){
@@ -985,6 +1064,7 @@ function renderImgField(){
   wrap.querySelectorAll('.rm').forEach(btn => btn.addEventListener('click', () => {
     modalImages = modalImages.filter(m => m.id !== btn.dataset.id);
     renderImgField();
+    renderVisualPanel();
   }));
 }
 /* botón "Pegar imagen": lee el portapapeles del sistema directamente.
@@ -1031,6 +1111,7 @@ async function uploadImagesToModal(files){
       showToast('No se pudo subir la imagen. ¿Ya creaste el bucket "delsur-media" en Supabase?');
     }
     renderImgField();
+    renderVisualPanel();
   }
 }
 document.getElementById('f-images-input').addEventListener('change', e => {
@@ -1057,6 +1138,8 @@ document.getElementById('item-form').addEventListener('submit', async e=>{
   const assignee = document.getElementById('f-assignee').value.trim();
   const due = document.getElementById('f-due').value;
   const drive = document.getElementById('f-drive').value.trim();
+  const cta = document.getElementById('f-cta').value.trim();
+  const copyFinal = document.getElementById('f-copy').value.trim();
   const stage = document.getElementById('f-stage').value;
   const blocked = document.getElementById('f-blocked').checked;
   if(!client || !title) return;
@@ -1065,9 +1148,9 @@ document.getElementById('item-form').addEventListener('submit', async e=>{
 
   if(!isNewItem){
     const item = state.items.find(i=>i.id===editingId);
-    Object.assign(item, {client, title, format, assignee, due, stage, blocked, drive, images});
+    Object.assign(item, {client, title, format, assignee, due, stage, blocked, drive, images, cta, copyFinal});
   } else {
-    state.items.push({id: editingId, client, title, format, assignee, due, stage, blocked, drive, images});
+    state.items.push({id: editingId, client, title, format, assignee, due, stage, blocked, drive, images, cta, copyFinal});
   }
   if(client && !state.clients.includes(client)) state.clients.push(client);
   if(assignee && !state.team.includes(assignee)) state.team.push(assignee);
