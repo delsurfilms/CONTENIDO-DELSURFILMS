@@ -9,6 +9,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="DELSUR">
 <link rel="manifest" href="manifest.json">
+<script>
+  /* aplica el tema guardado ANTES de que se pinte la página, así no se ve
+     un flash de modo claro por una fracción de segundo al abrir en oscuro */
+  try{
+    if(localStorage.getItem('delsur-theme') === 'dark'){
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }catch(e){}
+</script>
 <title>DELSUR — Pipeline de contenido</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,6 +44,20 @@
     --s-aprobacion:#3A6EA5;
     --s-publicado:#4C7A4C;
     --radius:10px;
+  }
+  html[data-theme="dark"]{
+    --bg:#15130F;
+    --surface:#1E1B16;
+    --surface-alt:#26221B;
+    --ink:#F0ECE1;
+    --ink-soft:#B0A996;
+    --ink-faint:#726C5E;
+    --line:#37322A;
+    --accent:#E85A3F;
+    --accent-ink:#FFFFFF;
+    --sidebar-bg:#0F0D0A;
+    --sidebar-ink:#F0ECE1;
+    --sidebar-ink-soft:#8A8474;
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
@@ -184,6 +207,40 @@
     .stat-row{grid-template-columns:repeat(2,1fr);}
     .panels{grid-template-columns:1fr;}
   }
+
+  /* ---------- theme toggle ---------- */
+  .theme-toggle{
+    all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;
+    font-size:13px;color:#D8D2C4;border:1px solid rgba(255,255,255,0.12);
+  }
+  .theme-toggle:hover{background:rgba(255,255,255,0.06);color:#fff;}
+  .theme-toggle .icon{font-size:14px;}
+
+  /* ---------- drive thumbnail ---------- */
+  .drive-thumb-wrap{display:flex;flex-direction:column;gap:4px;align-self:flex-start;max-width:100%;}
+  .drive-thumb{width:100%;max-width:170px;max-height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block;}
+  .drive-thumb[data-failed="1"]{display:none;}
+
+  /* ---------- reference images on cards ---------- */
+  .card-thumbs{display:flex;gap:4px;margin-top:2px;}
+  .card-thumbs img{width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid var(--line);}
+  .card-thumbs .more{width:36px;height:36px;border-radius:5px;background:var(--surface-alt);color:var(--ink-soft);font-size:10.5px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;}
+
+  /* ---------- image upload field in modal ---------- */
+  .img-field{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
+  .img-thumb{position:relative;width:64px;height:64px;border-radius:7px;overflow:hidden;border:1px solid var(--line);}
+  .img-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .img-thumb.uploading{display:flex;align-items:center;justify-content:center;background:var(--surface-alt);font-size:10px;color:var(--ink-soft);text-align:center;}
+  .img-thumb .rm{
+    all:unset;position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;
+    background:rgba(20,18,14,0.75);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .img-thumb .rm:hover{background:var(--accent);}
+  .img-add-btn{
+    all:unset;width:64px;height:64px;border-radius:7px;border:1.5px dashed var(--line);color:var(--ink-soft);
+    display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;text-align:center;
+  }
+  .img-add-btn:hover{border-color:var(--ink-soft);}
 </style>
 </head>
 <body>
@@ -202,6 +259,10 @@
       <button class="navbtn" data-view="ideas"><span class="n">05</span> Banco de ideas</button>
     </nav>
     <div class="sidebar-foot" id="conn-status">Tablero compartido vía Supabase.</div>
+    <button class="theme-toggle" id="theme-toggle" type="button">
+      <span class="icon" id="theme-icon">☾</span>
+      <span id="theme-label">Modo oscuro</span>
+    </button>
   </div>
 
   <main>
@@ -317,6 +378,13 @@
       <div class="field">
         <label>Carpeta / archivo (Drive)</label>
         <input id="f-drive" placeholder="Link a la carpeta o archivo de esta pieza">
+      </div>
+      <div class="field">
+        <label>Imágenes de referencia</label>
+        <div class="img-field" id="f-images-field">
+          <button type="button" class="img-add-btn" id="img-add-btn">+</button>
+        </div>
+        <input type="file" id="f-images-input" accept="image/*" multiple style="display:none;">
       </div>
       <div class="field">
         <label>Etapa</label>
@@ -448,10 +516,17 @@ const stageLabel = k => (STAGES.find(s => s.key === k) || {}).label || k;
    ===================================================================== */
 const SUPABASE_URL = 'https://tzrgsezhfcyawwgzcydp.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_EMi6bmJIdDOepwC3QyaQqg_mbi9EAGc';
+/* nombre del bucket de Supabase Storage para las imágenes de referencia.
+   Tiene que existir un bucket público con este nombre — ver instrucciones
+   de configuración al final de este archivo. */
+const SUPABASE_BUCKET = 'delsur-media';
 /* ===================================================================== */
 
-let state = { items: [], clients: [], team: [], clientProfiles: {}, ideas: [] };
 let editingId = null;
+let isNewItem = false;
+let modalImages = []; // imágenes de la pieza que se está editando en el modal
+
+let state = { items: [], clients: [], team: [], clientProfiles: {}, ideas: [] };
 let editingClient = null;
 let editingIdea = null;
 let calDate = new Date();
@@ -484,6 +559,43 @@ async function sbSetState(data){
     body: JSON.stringify({ data })
   });
   if(!res.ok) throw new Error('save-failed-' + res.status);
+}
+
+/* ---------- Supabase Storage (imágenes de referencia) ---------- */
+/* Achica y comprime la imagen en el navegador antes de subirla, así no
+   se sube un archivo de 8MB de una foto de celular tal cual. */
+function compressImage(file, maxDim = 1600, quality = 0.82){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read-failed'));
+    reader.onload = e => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('decode-failed'));
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > maxDim || height > maxDim){
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('compress-failed')), 'image/jpeg', quality);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function sbUploadImage(blob, path){
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${path}`, {
+    method: 'POST',
+    headers: sbHeaders({ 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }),
+    body: blob
+  });
+  if(!res.ok) throw new Error('upload-failed-' + res.status);
+  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${path}`;
 }
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -679,9 +791,17 @@ function cardHtml(i){
         <span>${esc(i.format || '')}${i.assignee ? ' · ' + esc(i.assignee) : ''}</span>
         <span class="due ${late ? 'late' : ''}">${fmtDate(i.due)}</span>
       </div>
-      ${i.drive ? `<a href="${esc(normalizeUrl(i.drive))}" target="_blank" rel="noopener" class="drive-link" onclick="event.stopPropagation()">Ver en Drive ↗</a>` : ''}
+      ${cardThumbsHtml(i.images)}
+      ${i.drive ? `<div class="drive-thumb-wrap">${driveThumbHtml(i.drive)}<a href="${esc(normalizeUrl(i.drive))}" target="_blank" rel="noopener" class="drive-link" onclick="event.stopPropagation()">Ver en Drive ↗</a></div>` : ''}
     </div>
   `;
+}
+
+function cardThumbsHtml(images){
+  if(!images || !images.length) return '';
+  const shown = images.slice(0, 3);
+  const extra = images.length - shown.length;
+  return `<div class="card-thumbs">${shown.map(u => `<img src="${esc(u)}" loading="lazy" alt="">`).join('')}${extra > 0 ? `<div class="more">+${extra}</div>` : ''}</div>`;
 }
 
 function esc(s){ const d=document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
@@ -692,6 +812,25 @@ function normalizeUrl(url){
   if(!url) return '';
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
+
+/* intenta armar una miniatura para links de archivo de Drive (no carpetas).
+   Si el archivo es privado, la imagen falla al cargar y se oculta sola
+   (ver CSS .drive-thumb[data-failed]) — no rompe nada, solo no se muestra. */
+function driveFileId(url){
+  if(!url) return null;
+  let m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if(m) return m[1];
+  m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if(m) return m[1];
+  return null;
+}
+function driveThumbHtml(url){
+  const id = driveFileId(url);
+  if(!id) return '';
+  const thumbUrl = `https://drive.google.com/thumbnail?id=${id}&sz=w400`;
+  return `<img src="${thumbUrl}" class="drive-thumb" loading="lazy" referrerpolicy="no-referrer" onerror="this.dataset.failed='1'" alt="">`;
+}
+
 
 function renderAll(){
   renderDashboard();
@@ -759,7 +898,7 @@ function renderClients(){
         <div class="meta-line">${esc(profile.plan || 'Sin plan cargado')}</div>
         ${profile.tone ? `<div class="meta-line">Tono: ${esc(profile.tone)}</div>` : ''}
         <div class="stats"><span>${activos} activas</span><span>${publicados} publicadas</span></div>
-        ${profile.drive ? `<a href="${esc(normalizeUrl(profile.drive))}" target="_blank" rel="noopener" class="drive-link" onclick="event.stopPropagation()">Abrir carpeta ↗</a>` : ''}
+        ${profile.drive ? `<div class="drive-thumb-wrap">${driveThumbHtml(profile.drive)}<a href="${esc(normalizeUrl(profile.drive))}" target="_blank" rel="noopener" class="drive-link" onclick="event.stopPropagation()">Abrir carpeta ↗</a></div>` : ''}
       </div>
     `;
   }).join('');
@@ -780,7 +919,7 @@ function renderIdeas(){
       <h4>${esc(idea.title)}</h4>
       ${idea.client ? `<div class="meta-line">${esc(idea.client)}</div>` : ''}
       ${idea.notes ? `<div class="notes">${esc(idea.notes)}</div>` : ''}
-      ${idea.link ? `<a href="${esc(normalizeUrl(idea.link))}" target="_blank" rel="noopener" class="drive-link" onclick="event.stopPropagation()">Abrir link ↗</a>` : ''}
+      ${idea.link ? `<div class="drive-thumb-wrap">${driveThumbHtml(idea.link)}<a href="${esc(normalizeUrl(idea.link))}" target="_blank" rel="noopener" class="drive-link" onclick="event.stopPropagation()">Abrir link ↗</a></div>` : ''}
     </div>
   `).join('');
   grid.querySelectorAll('.entity-card').forEach(card => {
@@ -806,7 +945,8 @@ document.getElementById('cancel-btn').addEventListener('click', closeModal);
 overlay.addEventListener('click', e=>{ if(e.target === overlay) closeModal(); });
 
 function openModal(id){
-  editingId = id;
+  isNewItem = !id;
+  editingId = id || uid();
   const item = id ? state.items.find(i=>i.id===id) : null;
   document.getElementById('modal-title').textContent = item ? 'Editar pieza' : 'Nueva pieza';
   document.getElementById('f-client').value = item ? item.client : '';
@@ -818,10 +958,62 @@ function openModal(id){
   document.getElementById('f-stage').value = item ? item.stage : 'idea';
   document.getElementById('f-blocked').checked = item ? !!item.blocked : false;
   document.getElementById('delete-btn').style.display = item ? 'inline' : 'none';
+  modalImages = (item && item.images ? item.images : []).map(url => ({id: uid(), url, uploading:false}));
+  renderImgField();
   overlay.classList.add('open');
   document.getElementById('f-client').focus();
 }
-function closeModal(){ overlay.classList.remove('open'); editingId = null; }
+function closeModal(){ overlay.classList.remove('open'); editingId = null; isNewItem = false; modalImages = []; }
+
+/* ---------- imágenes de referencia dentro del modal ---------- */
+function renderImgField(){
+  const wrap = document.getElementById('f-images-field');
+  wrap.innerHTML = modalImages.map(m => m.uploading
+    ? `<div class="img-thumb uploading" data-id="${m.id}">Subiendo…</div>`
+    : `<div class="img-thumb" data-id="${m.id}"><img src="${esc(m.url)}" alt=""><button type="button" class="rm" data-id="${m.id}" title="Quitar">×</button></div>`
+  ).join('') + `<button type="button" class="img-add-btn" id="img-add-btn">+</button>`;
+  document.getElementById('img-add-btn').addEventListener('click', () => document.getElementById('f-images-input').click());
+  wrap.querySelectorAll('.rm').forEach(btn => btn.addEventListener('click', () => {
+    modalImages = modalImages.filter(m => m.id !== btn.dataset.id);
+    renderImgField();
+  }));
+}
+/* sube una lista de archivos de imagen al modal (usado tanto al elegir
+   archivos con el botón "+" como al pegar una imagen del portapapeles) */
+async function uploadImagesToModal(files){
+  for(const file of files){
+    const tempId = uid();
+    modalImages.push({id: tempId, uploading: true});
+    renderImgField();
+    try{
+      if(!hasConfig()) throw new Error('sin-configurar');
+      const blob = await compressImage(file);
+      const path = `${editingId}/${tempId}.jpg`;
+      const url = await sbUploadImage(blob, path);
+      const entry = modalImages.find(m => m.id === tempId);
+      if(entry){ entry.uploading = false; entry.url = url; }
+    }catch(err){
+      modalImages = modalImages.filter(m => m.id !== tempId);
+      showToast('No se pudo subir la imagen. ¿Ya creaste el bucket "delsur-media" en Supabase?');
+    }
+    renderImgField();
+  }
+}
+document.getElementById('f-images-input').addEventListener('change', e => {
+  const files = Array.from(e.target.files);
+  e.target.value = '';
+  uploadImagesToModal(files);
+});
+/* pegar una imagen (Ctrl+V) mientras el modal de pieza está abierto la sube igual
+   que si la hubieras elegido con el botón "+" — no hace falta guardarla antes */
+document.addEventListener('paste', e => {
+  if(!overlay.classList.contains('open')) return;
+  const files = Array.from(e.clipboardData?.items || [])
+    .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+    .map(it => it.getAsFile())
+    .filter(Boolean);
+  if(files.length) uploadImagesToModal(files);
+});
 
 document.getElementById('item-form').addEventListener('submit', async e=>{
   e.preventDefault();
@@ -834,12 +1026,14 @@ document.getElementById('item-form').addEventListener('submit', async e=>{
   const stage = document.getElementById('f-stage').value;
   const blocked = document.getElementById('f-blocked').checked;
   if(!client || !title) return;
+  if(modalImages.some(m => m.uploading)){ showToast('Esperá a que terminen de subir las imágenes.'); return; }
+  const images = modalImages.map(m => m.url);
 
-  if(editingId){
+  if(!isNewItem){
     const item = state.items.find(i=>i.id===editingId);
-    Object.assign(item, {client, title, format, assignee, due, stage, blocked, drive});
+    Object.assign(item, {client, title, format, assignee, due, stage, blocked, drive, images});
   } else {
-    state.items.push({id: uid(), client, title, format, assignee, due, stage, blocked, drive});
+    state.items.push({id: editingId, client, title, format, assignee, due, stage, blocked, drive, images});
   }
   if(client && !state.clients.includes(client)) state.clients.push(client);
   if(assignee && !state.team.includes(assignee)) state.team.push(assignee);
@@ -850,7 +1044,7 @@ document.getElementById('item-form').addEventListener('submit', async e=>{
 });
 
 document.getElementById('delete-btn').addEventListener('click', ()=>{
-  if(!editingId) return;
+  if(!editingId || isNewItem) return;
   state.items = state.items.filter(i=>i.id!==editingId);
   saveState();
   renderAll();
@@ -971,6 +1165,26 @@ document.getElementById('refresh-btn').addEventListener('click', async () => {
     if(data){ state = normalizeState(data); renderAll(); showToast('Actualizado'); }
   }catch(e){ showToast('No se pudo actualizar. Revisá la conexión.'); }
 });
+
+/* ---------- modo oscuro / claro ---------- */
+function applyTheme(theme){
+  if(theme === 'dark'){
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.getElementById('theme-icon').textContent = '☀';
+    document.getElementById('theme-label').textContent = 'Modo claro';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.getElementById('theme-icon').textContent = '☾';
+    document.getElementById('theme-label').textContent = 'Modo oscuro';
+  }
+}
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const next = isDark ? 'light' : 'dark';
+  applyTheme(next);
+  try{ localStorage.setItem('delsur-theme', next); }catch(e){}
+});
+applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
 
 initStageSelect();
 loadState();
