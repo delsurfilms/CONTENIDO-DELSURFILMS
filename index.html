@@ -194,12 +194,17 @@
   .cal-month-label{font-family:'Bebas Neue',sans-serif;font-size:20px;min-width:170px;text-align:center;text-transform:capitalize;}
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
   .cal-daylabel{font-size:11px;color:var(--ink-soft);text-align:center;padding-bottom:2px;font-family:'IBM Plex Mono',monospace;}
-  .cal-cell{background:var(--surface);border:1px solid var(--line);border-radius:8px;min-height:92px;padding:6px;display:flex;flex-direction:column;gap:3px;}
+  .cal-cell{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:8px;min-height:92px;padding:6px;display:flex;flex-direction:column;gap:3px;}
   .cal-cell.other-month{opacity:0.35;}
+  .cal-cell.dragover{outline:2px dashed var(--accent);outline-offset:-2px;background:rgba(0,0,0,0.04);}
   .cal-cell .daynum{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-faint);}
-  .cal-item{font-size:10px;padding:3px 5px;border-radius:5px;color:#fff;cursor:pointer;overflow:hidden;}
-  .cal-item-thumb{width:100%;height:40px;object-fit:cover;border-radius:4px;display:block;margin-bottom:3px;}
+  .cal-add-btn{position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:5px;border:none;background:var(--surface-alt);color:var(--ink-soft);font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;padding:0;}
+  .cal-cell:hover .cal-add-btn{opacity:1;}
+  .cal-item{font-size:10px;padding:3px 5px;border-radius:5px;color:#fff;cursor:grab;overflow:hidden;}
+  .cal-item.dragging{opacity:.4;}
+  .cal-item-thumb{width:100%;height:auto;max-height:150px;object-fit:contain;background:rgba(0,0,0,0.18);border-radius:4px;display:block;margin-bottom:3px;}
   .cal-item-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;}
+  .cal-section-gap{margin-top:34px;}
 
   /* ---------- clients & ideas grids ---------- */
   .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
@@ -342,6 +347,17 @@
         </div>
       </div>
       <div class="cal-grid" id="cal-grid"></div>
+
+      <div class="cal-head cal-section-gap">
+        <div>
+          <h2>Historias</h2>
+          <div class="sub">Solo piezas con formato "Story".</div>
+        </div>
+        <div class="cal-nav">
+          <div class="cal-month-label" id="cal-label-stories"></div>
+        </div>
+      </div>
+      <div class="cal-grid" id="cal-grid-stories"></div>
     </section>
 
     <!-- CLIENTS -->
@@ -879,11 +895,9 @@ function renderAll(){
 
 /* ---------- render: calendar ---------- */
 const DAY_LABELS = ['L','M','X','J','V','S','D'];
-function renderCalendar(){
-  const year = calDate.getFullYear();
-  const month = calDate.getMonth();
-  document.getElementById('cal-label').textContent = calDate.toLocaleDateString('es-AR', {month:'long', year:'numeric'});
-
+/* construye el HTML de un mes de calendario para un subconjunto de piezas.
+   Se reutiliza tanto para el calendario principal como para el de Historias. */
+function buildCalendarHtml(items, year, month){
   const firstOfMonth = new Date(year, month, 1);
   let startOffset = firstOfMonth.getDay() - 1; // Monday-first
   if(startOffset < 0) startOffset = 6;
@@ -892,7 +906,7 @@ function renderCalendar(){
   const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
 
   const itemsByDate = {};
-  state.items.forEach(i => { if(i.due){ (itemsByDate[i.due] = itemsByDate[i.due] || []).push(i); } });
+  items.forEach(i => { if(i.due){ (itemsByDate[i.due] = itemsByDate[i.due] || []).push(i); } });
 
   let html = DAY_LABELS.map(l => `<div class="cal-daylabel">${l}</div>`).join('');
   for(let c = 0; c < totalCells; c++){
@@ -904,10 +918,11 @@ function renderCalendar(){
     const dateStr = toLocalDateStr(cellDate);
     const dayItems = itemsByDate[dateStr] || [];
     html += `
-      <div class="cal-cell ${otherMonth ? 'other-month' : ''}">
+      <div class="cal-cell ${otherMonth ? 'other-month' : ''}" data-date="${dateStr}">
         <span class="daynum">${cellDate.getDate()}</span>
+        <button type="button" class="cal-add-btn" data-date="${dateStr}" title="Agregar pieza este día">+</button>
         ${dayItems.map(i => `
-          <div class="cal-item" style="background:${stageColor(i.stage)}" data-id="${i.id}" title="${esc(i.client)} — ${esc(i.title)}">
+          <div class="cal-item" draggable="true" style="background:${stageColor(i.stage)}" data-id="${i.id}" title="${esc(i.client)} — ${esc(i.title)}">
             ${i.images && i.images.length ? `<img class="cal-item-thumb" src="${esc(i.images[0])}" loading="lazy" alt="">` : ''}
             <span class="cal-item-text">${esc(i.client)}: ${esc(i.title)}</span>
           </div>
@@ -915,10 +930,56 @@ function renderCalendar(){
       </div>
     `;
   }
-  document.getElementById('cal-grid').innerHTML = html;
-  document.querySelectorAll('.cal-item').forEach(el => {
+  return html;
+}
+
+/* engancha los eventos de click (abrir/agregar) y drag&drop (reprogramar fecha)
+   de un grid de calendario ya renderizado en el DOM. */
+function wireCalendarGrid(gridEl){
+  gridEl.querySelectorAll('.cal-item').forEach(el => {
     el.addEventListener('click', () => openModal(el.dataset.id));
+    el.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', el.dataset.id);
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', () => el.classList.remove('dragging'));
   });
+  gridEl.querySelectorAll('.cal-add-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openModal(null, btn.dataset.date);
+    });
+  });
+  gridEl.querySelectorAll('.cal-cell').forEach(cell => {
+    cell.addEventListener('dragover', e => { e.preventDefault(); cell.classList.add('dragover'); });
+    cell.addEventListener('dragleave', () => cell.classList.remove('dragover'));
+    cell.addEventListener('drop', e => {
+      e.preventDefault();
+      cell.classList.remove('dragover');
+      const id = e.dataTransfer.getData('text/plain');
+      const item = state.items.find(i => i.id === id);
+      if(item){ item.due = cell.dataset.date; saveState(); renderAll(); }
+    });
+  });
+}
+
+function renderCalendar(){
+  const year = calDate.getFullYear();
+  const month = calDate.getMonth();
+  const label = calDate.toLocaleDateString('es-AR', {month:'long', year:'numeric'});
+  document.getElementById('cal-label').textContent = label;
+  document.getElementById('cal-label-stories').textContent = label;
+
+  // el calendario de Historias vive aparte, así que el principal no la duplica
+  const mainItems = state.items.filter(i => i.format !== 'Story');
+  const storyItems = state.items.filter(i => i.format === 'Story');
+
+  const mainGrid = document.getElementById('cal-grid');
+  const storyGrid = document.getElementById('cal-grid-stories');
+  mainGrid.innerHTML = buildCalendarHtml(mainItems, year, month);
+  storyGrid.innerHTML = buildCalendarHtml(storyItems, year, month);
+  wireCalendarGrid(mainGrid);
+  wireCalendarGrid(storyGrid);
 }
 document.getElementById('cal-prev').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()-1); renderCalendar(); });
 document.getElementById('cal-next').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()+1); renderCalendar(); });
@@ -985,7 +1046,7 @@ document.getElementById('new-item-btn').addEventListener('click', ()=> openModal
 document.getElementById('cancel-btn').addEventListener('click', closeModal);
 overlay.addEventListener('click', e=>{ if(e.target === overlay) closeModal(); });
 
-function openModal(id){
+function openModal(id, prefillDate){
   isNewItem = !id;
   editingId = id || uid();
   const item = id ? state.items.find(i=>i.id===id) : null;
@@ -994,7 +1055,7 @@ function openModal(id){
   document.getElementById('f-title').value = item ? item.title : '';
   document.getElementById('f-format').value = item ? item.format : 'Reel';
   document.getElementById('f-assignee').value = item ? item.assignee : '';
-  document.getElementById('f-due').value = item ? (item.due || '') : '';
+  document.getElementById('f-due').value = item ? (item.due || '') : (prefillDate || '');
   document.getElementById('f-drive').value = item ? (item.drive || '') : '';
   document.getElementById('f-cta').value = item ? (item.cta || '') : '';
   document.getElementById('f-copy').value = item ? (item.copyFinal || '') : '';
