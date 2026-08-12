@@ -205,6 +205,17 @@
   .cal-item-thumb{width:100%;height:auto;max-height:150px;object-fit:contain;background:rgba(0,0,0,0.18);border-radius:4px;display:block;margin-bottom:3px;}
   .cal-item-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;}
   .cal-section-gap{margin-top:34px;}
+  .stage-row{display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line);cursor:grab;}
+  .stage-row.dragging{opacity:.4;}
+  .stage-row.dragover-top{border-top:2px solid var(--accent);}
+  .stage-row.dragover-bottom{border-bottom:2px solid var(--accent);}
+  .stage-drag{color:var(--ink-faint);font-size:14px;user-select:none;flex-shrink:0;}
+  .stage-color{width:26px;height:26px;border:none;border-radius:6px;padding:0;background:none;cursor:pointer;flex-shrink:0;}
+  .stage-name{flex:1;border:1px solid transparent;background:transparent;color:var(--ink);font-size:14px;padding:6px 8px;border-radius:6px;font-family:inherit;}
+  .stage-name:hover, .stage-name:focus{border-color:var(--line);background:var(--surface-alt);outline:none;}
+  .stage-count{font-size:11px;color:var(--ink-faint);font-family:'IBM Plex Mono',monospace;flex-shrink:0;min-width:56px;text-align:right;}
+  .stage-del{border:none;background:none;color:var(--ink-faint);cursor:pointer;font-size:15px;padding:4px 6px;flex-shrink:0;}
+  .stage-del:hover{color:var(--accent);}
 
   /* ---------- clients & ideas grids ---------- */
   .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
@@ -325,7 +336,10 @@
           <h2>Pipeline de producción</h2>
           <div class="sub">Arrastrá una tarjeta para cambiarla de etapa.</div>
         </div>
-        <button class="btn accent" id="new-item-btn">+ Nueva pieza</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn ghost" id="edit-stages-btn">⚙ Editar etapas</button>
+          <button class="btn accent" id="new-item-btn">+ Nueva pieza</button>
+        </div>
       </div>
       <div style="margin-bottom:10px;">
         <button class="btn ghost" id="refresh-btn" style="font-size:12px;padding:6px 12px;">↻ Buscar cambios del equipo</button>
@@ -543,21 +557,56 @@
   </div>
 </div>
 
+<div class="overlay" id="overlay-stages">
+  <div class="modal" style="width:480px;">
+    <h3>Etapas del pipeline</h3>
+    <div class="sub" style="margin-top:-10px;margin-bottom:14px;">
+      Se ven así para todo el equipo. Arrastrá para reordenar, tocá el nombre o el color para editarlos.
+    </div>
+    <div id="stages-list"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button type="button" class="btn ghost" id="stage-add-btn">+ Agregar etapa</button>
+      <div style="margin-left:auto;">
+        <button type="button" class="btn accent" id="stages-close-btn">Listo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
-const STAGES = [
-  {key:'idea', label:'Idea', color:'var(--s-idea)'},
-  {key:'guion', label:'Guion', color:'var(--s-guion)'},
-  {key:'grabacion', label:'Grabación', color:'var(--s-grabacion)'},
-  {key:'edicion', label:'Edición', color:'var(--s-edicion)'},
-  {key:'revision', label:'Revisión interna', color:'var(--s-revision)'},
-  {key:'aprobacion', label:'Aprobación cliente', color:'var(--s-aprobacion)'},
-  {key:'publicado', label:'Publicado', color:'var(--s-publicado)'},
+/* Las etapas del pipeline ahora viven en state.stages (se guardan en Supabase),
+   así el equipo las puede editar, agregar y borrar desde "⚙ Editar etapas"
+   sin tocar código. Esta lista es solo el default con el que arranca una
+   tabla nueva o vacía — ver DEFAULT_STAGES / normalizeState más abajo. */
+const DEFAULT_STAGES = [
+  {key:'idea_reel', label:'Idea Reel', color:'#8A8578'},
+  {key:'idea_reel_humor', label:'Idea Reel Humor', color:'#A9825B'},
+  {key:'idea_foto', label:'Idea Foto', color:'#B08B4F'},
+  {key:'a_grabar', label:'A Grabar/Hacer', color:'#C2703A'},
+  {key:'grabado', label:'Grabado', color:'#D6432E'},
+  {key:'edicion_proceso', label:'Edición en Proceso', color:'#8B5FA3'},
+  {key:'editado', label:'Editado', color:'#3A6EA5'},
+  {key:'subido_programado', label:'Subido/Programado', color:'#4C7A4C'},
 ];
-const stageIndex = k => STAGES.findIndex(s => s.key === k);
-const stageColor = k => (STAGES.find(s => s.key === k) || {}).color || 'var(--ink)';
-const stageLabel = k => (STAGES.find(s => s.key === k) || {}).label || k;
+/* mapeo de las etapas viejas (por si había piezas guardadas con el set
+   anterior de 7 etapas) a las nuevas 8, para que ninguna pieza quede
+   "perdida" sin etapa visible. Es una correspondencia aproximada — vale
+   la pena revisar el pipeline después de actualizar y reacomodar a mano
+   las piezas que hayan quedado en la columna que no correspondía. */
+const STAGE_MIGRATION = {
+  idea: 'idea_reel',
+  guion: 'a_grabar',
+  grabacion: 'grabado',
+  edicion: 'edicion_proceso',
+  revision: 'editado',
+  aprobacion: 'editado',
+  publicado: 'subido_programado',
+};
+const stageIndex = k => state.stages.findIndex(s => s.key === k);
+const stageColor = k => (state.stages.find(s => s.key === k) || {}).color || 'var(--ink)';
+const stageLabel = k => (state.stages.find(s => s.key === k) || {}).label || k;
 
 /* =====================================================================
    CONFIGURACIÓN — completar antes de subir a GitHub / publicar
@@ -578,7 +627,7 @@ let editingId = null;
 let isNewItem = false;
 let modalImages = []; // imágenes de la pieza que se está editando en el modal
 
-let state = { items: [], clients: [], team: [], clientProfiles: {}, ideas: [] };
+let state = { items: [], clients: [], team: [], clientProfiles: {}, ideas: [], stages: DEFAULT_STAGES.map(s => ({...s})) };
 let editingClient = null;
 let editingIdea = null;
 let calDate = new Date();
@@ -665,6 +714,15 @@ function normalizeState(data){
   if(!s.team) s.team = [];
   if(!s.clientProfiles) s.clientProfiles = {};
   if(!s.ideas) s.ideas = [];
+  if(!s.stages || !s.stages.length) s.stages = DEFAULT_STAGES.map(x => ({...x}));
+  // migra piezas que hayan quedado con una etapa del set viejo (7 etapas)
+  // que ya no existe en la lista actual, para que no desaparezcan del pipeline
+  const validKeys = new Set(s.stages.map(x => x.key));
+  s.items.forEach(item => {
+    if(item.stage && !validKeys.has(item.stage)){
+      item.stage = STAGE_MIGRATION[item.stage] || s.stages[0].key;
+    }
+  });
   return s;
 }
 
@@ -799,7 +857,7 @@ function renderDashboard(){
 /* ---------- render: pipeline ---------- */
 function renderBoard(){
   const board = document.getElementById('board');
-  board.innerHTML = STAGES.map((s, idx) => {
+  board.innerHTML = state.stages.map((s, idx) => {
     const colItems = state.items.filter(i => i.stage === s.key);
     return `
       <div class="column">
@@ -891,6 +949,8 @@ function renderAll(){
   renderClients();
   renderIdeas();
   refreshDatalists();
+  initStageSelect();
+  if(document.getElementById('overlay-stages').classList.contains('open')) renderStagesList();
 }
 
 /* ---------- render: calendar ---------- */
@@ -1033,11 +1093,14 @@ function refreshDatalists(){
   document.getElementById('clients-list').innerHTML = [...new Set(state.clients)].map(c=>`<option value="${esc(c)}">`).join('');
   document.getElementById('team-list').innerHTML = [...new Set(state.team)].map(t=>`<option value="${esc(t)}">`).join('');
 }
-/* las opciones de etapa no cambian nunca, así que se cargan una sola vez.
-   Si se recargaran en cada render, un sync automático mientras el modal
-   está abierto reseteaba la selección del usuario a "Idea" sin avisar. */
+/* las opciones de etapa se reconstruyen cada vez que cambian (alta, edición,
+   borrado o reorden desde "⚙ Editar etapas"), pero conservamos la selección
+   actual del formulario para no resetearla a la primera opción sin avisar. */
 function initStageSelect(){
-  document.getElementById('f-stage').innerHTML = STAGES.map(s=>`<option value="${s.key}">${s.label}</option>`).join('');
+  const sel = document.getElementById('f-stage');
+  const current = sel.value;
+  sel.innerHTML = state.stages.map(s=>`<option value="${s.key}">${esc(s.label)}</option>`).join('');
+  if(state.stages.some(s => s.key === current)) sel.value = current;
 }
 
 /* ---------- modal ---------- */
@@ -1363,6 +1426,107 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
   try{ localStorage.setItem('delsur-theme', next); }catch(e){}
 });
 applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+
+/* ---------- gestión de etapas del pipeline (agregar / renombrar / recolorear / reordenar / borrar) ---------- */
+const overlayStages = document.getElementById('overlay-stages');
+const STAGE_PALETTE = ['#8A8578','#A9825B','#B08B4F','#C2703A','#D6432E','#8B5FA3','#3A6EA5','#4C7A4C','#5A8A72','#B0555F'];
+let draggedStageKey = null;
+
+document.getElementById('edit-stages-btn').addEventListener('click', () => {
+  renderStagesList();
+  overlayStages.classList.add('open');
+});
+document.getElementById('stages-close-btn').addEventListener('click', () => overlayStages.classList.remove('open'));
+overlayStages.addEventListener('click', e => { if(e.target === overlayStages) overlayStages.classList.remove('open'); });
+
+function renderStagesList(){
+  const list = document.getElementById('stages-list');
+  list.innerHTML = state.stages.map(s => {
+    const count = state.items.filter(i => i.stage === s.key).length;
+    return `
+      <div class="stage-row" draggable="true" data-key="${s.key}">
+        <span class="stage-drag">⠿</span>
+        <input type="color" class="stage-color" data-key="${s.key}" value="${s.color}">
+        <input type="text" class="stage-name" data-key="${s.key}" value="${esc(s.label)}">
+        <span class="stage-count">${count} pieza${count===1?'':'s'}</span>
+        <button type="button" class="stage-del" data-key="${s.key}" title="Borrar etapa">🗑</button>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.stage-name').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const st = state.stages.find(x => x.key === inp.dataset.key);
+      if(st && inp.value.trim()){ st.label = inp.value.trim(); saveState(); renderAll(); }
+    });
+  });
+  list.querySelectorAll('.stage-color').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const st = state.stages.find(x => x.key === inp.dataset.key);
+      if(st){ st.color = inp.value; saveState(); renderAll(); }
+    });
+  });
+  list.querySelectorAll('.stage-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const inUse = state.items.some(i => i.stage === key);
+      if(inUse){ showToast('Esa etapa tiene piezas cargadas — movelas a otra etapa antes de borrarla.'); return; }
+      if(state.stages.length <= 1){ showToast('Tiene que quedar al menos una etapa.'); return; }
+      state.stages = state.stages.filter(x => x.key !== key);
+      saveState();
+      renderAll();
+    });
+  });
+
+  // reordenar arrastrando las filas
+  list.querySelectorAll('.stage-row').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      draggedStageKey = row.dataset.key;
+      row.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', row.dataset.key);
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      list.querySelectorAll('.stage-row').forEach(r => r.classList.remove('dragover-top','dragover-bottom'));
+    });
+    row.addEventListener('dragover', e => {
+      e.preventDefault();
+      if(!draggedStageKey || draggedStageKey === row.dataset.key) return;
+      const rect = row.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      row.classList.toggle('dragover-top', before);
+      row.classList.toggle('dragover-bottom', !before);
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('dragover-top','dragover-bottom'));
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      row.classList.remove('dragover-top','dragover-bottom');
+      const fromKey = e.dataTransfer.getData('text/plain');
+      const toKey = row.dataset.key;
+      if(!fromKey || fromKey === toKey) return;
+      const fromIdx = state.stages.findIndex(x => x.key === fromKey);
+      const toIdx = state.stages.findIndex(x => x.key === toKey);
+      if(fromIdx < 0 || toIdx < 0) return;
+      const rect = row.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      const [moved] = state.stages.splice(fromIdx, 1);
+      let insertAt = state.stages.findIndex(x => x.key === toKey);
+      if(!before) insertAt += 1;
+      state.stages.splice(insertAt, 0, moved);
+      saveState();
+      renderAll();
+    });
+  });
+}
+
+document.getElementById('stage-add-btn').addEventListener('click', () => {
+  const label = prompt('Nombre de la nueva etapa:');
+  if(!label || !label.trim()) return;
+  const color = STAGE_PALETTE[state.stages.length % STAGE_PALETTE.length];
+  state.stages.push({key: 'stage_' + uid(), label: label.trim(), color});
+  saveState();
+  renderAll();
+});
 
 initStageSelect();
 loadState();
