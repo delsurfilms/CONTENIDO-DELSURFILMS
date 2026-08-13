@@ -223,6 +223,20 @@
   .cal-filter-actions button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:11px;padding:0;}
   .cal-filter-row{display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;color:var(--ink);cursor:pointer;}
   .cal-filter-row input{flex-shrink:0;}
+  .idea-card-top{display:flex;align-items:center;justify-content:space-between;gap:6px;}
+  .sent-pill{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 7px;border-radius:5px;background:rgba(76,122,76,0.18);color:#4C7A4C;}
+  .link-preview{display:block;border:1px solid var(--line);border-radius:8px;overflow:hidden;text-decoration:none;color:inherit;background:var(--surface-alt);}
+  .link-preview:hover{border-color:var(--ink-faint);}
+  .link-preview-img{width:100%;max-height:160px;object-fit:cover;display:block;background:rgba(0,0,0,0.15);}
+  .link-preview-body{padding:8px 10px;display:flex;flex-direction:column;gap:3px;}
+  .link-preview-title{font-size:12.5px;font-weight:600;color:var(--accent);line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  .link-preview-desc{font-size:11px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  .link-preview-site{font-size:10.5px;color:var(--ink-faint);display:flex;align-items:center;gap:4px;margin-top:2px;}
+  .idea-send-btn{align-self:flex-start;margin-top:2px;font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink);cursor:pointer;}
+  .idea-send-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .send-stage-row{display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:8px;cursor:pointer;border:1px solid transparent;}
+  .send-stage-row:hover{background:var(--surface-alt);border-color:var(--line);}
+  .send-stage-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
 
   /* ---------- clients & ideas grids ---------- */
   .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
@@ -580,6 +594,17 @@
       <div style="margin-left:auto;">
         <button type="button" class="btn accent" id="stages-close-btn">Listo</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-send">
+  <div class="modal" style="width:340px;">
+    <h3>Enviar al pipeline</h3>
+    <div class="sub" style="margin-top:-10px;margin-bottom:14px;">Elegí en qué etapa arranca esta pieza.</div>
+    <div id="send-stage-list"></div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button type="button" class="btn ghost" id="send-cancel-btn" style="margin-left:auto;">Cancelar</button>
     </div>
   </div>
 </div>
@@ -952,6 +977,59 @@ function driveThumbHtml(url){
   return `<img src="${thumbUrl}" class="drive-thumb" loading="lazy" referrerpolicy="no-referrer" onerror="this.dataset.failed='1'" alt="">`;
 }
 
+/* ---------- vista previa de links del Banco de ideas (estilo Trello) ----------
+   Detecta la red social por el dominio, para mostrar un ícono/nombre incluso
+   si todavía no llegó (o falló) la miniatura real. */
+function detectPlatform(url){
+  const u = (url || '').toLowerCase();
+  if(u.includes('instagram.com')) return {name:'Instagram', icon:'📷'};
+  if(u.includes('tiktok.com')) return {name:'TikTok', icon:'🎵'};
+  if(u.includes('youtube.com') || u.includes('youtu.be')) return {name:'YouTube', icon:'▶️'};
+  if(u.includes('drive.google.com')) return {name:'Drive', icon:'📁'};
+  if(u.includes('twitter.com') || u.includes('x.com')) return {name:'X', icon:'𝕏'};
+  try{ return {name: new URL(normalizeUrl(url)).hostname.replace(/^www\./,''), icon:'🔗'}; }
+  catch(e){ return {name:'Link', icon:'🔗'}; }
+}
+
+/* pide la miniatura/título/descripción real del link a un servicio externo
+   (Microlink, gratis, sin API key) — nuestra app es un solo HTML sin servidor
+   propio, así que no puede leer las etiquetas Open Graph de otro sitio
+   directamente (el navegador lo bloquea por seguridad, es una limitación de
+   todos los navegadores, no de cómo armamos esto). Si falla, devuelve null y
+   la tarjeta cae sola a la insignia de plataforma (ver detectPlatform). */
+async function fetchLinkPreview(url){
+  try{
+    const res = await fetch('https://api.microlink.io/?url=' + encodeURIComponent(normalizeUrl(url)) + '&palette=false');
+    if(!res.ok) return null;
+    const json = await res.json();
+    if(json.status !== 'success' || !json.data) return null;
+    return {
+      image: (json.data.image && json.data.image.url) || (json.data.screenshot && json.data.screenshot.url) || '',
+      title: json.data.title || '',
+      description: json.data.description || '',
+    };
+  }catch(e){ return null; }
+}
+
+/* arma el bloque de vista previa de una idea con link: imagen (si Microlink
+   la consiguió), título/descripción, y la insignia de plataforma con el link
+   de salida — todo clickeable, abre el link original en una pestaña nueva. */
+function linkPreviewHtml(idea){
+  const platform = detectPlatform(idea.link);
+  const preview = idea.preview;
+  const href = esc(normalizeUrl(idea.link));
+  return `
+    <a class="link-preview" href="${href}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+      ${preview && preview.image ? `<img src="${esc(preview.image)}" class="link-preview-img" loading="lazy" onerror="this.remove()" alt="">` : ''}
+      <div class="link-preview-body">
+        ${preview && preview.title ? `<div class="link-preview-title">${esc(preview.title)}</div>` : ''}
+        ${preview && preview.description ? `<div class="link-preview-desc">${esc(preview.description)}</div>` : ''}
+        <div class="link-preview-site">${platform.icon} ${esc(platform.name)} <span>↗</span></div>
+      </div>
+    </a>
+  `;
+}
+
 
 function renderAll(){
   renderDashboard();
@@ -1139,16 +1217,60 @@ function renderIdeas(){
   if(!state.ideas.length){ grid.innerHTML = `<div class="panel empty">Todavía no hay nada acá. Sumá ideas sueltas, referencias o assets reutilizables con "+ Nueva idea".</div>`; return; }
   grid.innerHTML = state.ideas.map(idea => `
     <div class="entity-card" data-id="${idea.id}">
-      <span class="type-pill" style="background:${IDEA_TYPE_COLOR[idea.type] || 'var(--ink)'}">${IDEA_TYPE_LABEL[idea.type] || idea.type}</span>
+      <div class="idea-card-top">
+        <span class="type-pill" style="background:${IDEA_TYPE_COLOR[idea.type] || 'var(--ink)'}">${IDEA_TYPE_LABEL[idea.type] || idea.type}</span>
+        ${idea.status === 'enviada' ? `<span class="sent-pill">Enviada ✓</span>` : ''}
+      </div>
       <h4>${esc(idea.title)}</h4>
       ${idea.client ? `<div class="meta-line">${esc(idea.client)}</div>` : ''}
       ${idea.notes ? `<div class="notes">${esc(idea.notes)}</div>` : ''}
-      ${idea.link ? `<div class="drive-thumb-wrap">${driveThumbHtml(idea.link)}<a href="${esc(normalizeUrl(idea.link))}" target="_blank" rel="noopener" class="drive-link" onclick="event.stopPropagation()">Abrir link ↗</a></div>` : ''}
+      ${idea.link ? linkPreviewHtml(idea) : ''}
+      <button type="button" class="idea-send-btn" data-id="${idea.id}">↦ Enviar al pipeline</button>
     </div>
   `).join('');
   grid.querySelectorAll('.entity-card').forEach(card => {
-    card.addEventListener('click', () => openIdeaModal(card.dataset.id));
+    card.addEventListener('click', (e) => {
+      if(e.target.closest('.idea-send-btn') || e.target.closest('.link-preview')) return;
+      openIdeaModal(card.dataset.id);
+    });
   });
+  grid.querySelectorAll('.idea-send-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); openSendToPipelineModal(btn.dataset.id); });
+  });
+}
+
+/* ---------- enviar una idea al pipeline ---------- */
+const overlaySend = document.getElementById('overlay-send');
+let sendIdeaId = null;
+function openSendToPipelineModal(ideaId){
+  sendIdeaId = ideaId;
+  document.getElementById('send-stage-list').innerHTML = state.stages.map(s => `
+    <div class="send-stage-row" data-key="${s.key}">
+      <span class="send-stage-dot" style="background:${s.color}"></span>
+      ${esc(s.label)}
+    </div>
+  `).join('');
+  document.getElementById('send-stage-list').querySelectorAll('.send-stage-row').forEach(row => {
+    row.addEventListener('click', () => {
+      overlaySend.classList.remove('open');
+      confirmSendIdea(sendIdeaId, row.dataset.key);
+    });
+  });
+  overlaySend.classList.add('open');
+}
+document.getElementById('send-cancel-btn').addEventListener('click', () => overlaySend.classList.remove('open'));
+overlaySend.addEventListener('click', e => { if(e.target === overlaySend) overlaySend.classList.remove('open'); });
+
+/* la idea queda marcada "Enviada" (se puede volver a enviar las veces que
+   haga falta) y se abre el modal de "Nueva pieza" ya precargado en la etapa
+   elegida, para que completes/revises los datos antes de guardarla. */
+function confirmSendIdea(ideaId, stageKey){
+  const idea = state.ideas.find(x => x.id === ideaId);
+  if(!idea) return;
+  idea.status = 'enviada';
+  saveState();
+  renderIdeas();
+  openModal(null, null, {client: idea.client || '', title: idea.title, drive: idea.link || '', stage: stageKey});
 }
 
 function refreshDatalists(){
@@ -1171,20 +1293,20 @@ document.getElementById('new-item-btn').addEventListener('click', ()=> openModal
 document.getElementById('cancel-btn').addEventListener('click', closeModal);
 overlay.addEventListener('click', e=>{ if(e.target === overlay) closeModal(); });
 
-function openModal(id, prefillDate){
+function openModal(id, prefillDate, prefill){
   isNewItem = !id;
   editingId = id || uid();
   const item = id ? state.items.find(i=>i.id===id) : null;
   document.getElementById('modal-title').textContent = item ? 'Editar pieza' : 'Nueva pieza';
-  document.getElementById('f-client').value = item ? item.client : '';
-  document.getElementById('f-title').value = item ? item.title : '';
+  document.getElementById('f-client').value = item ? item.client : ((prefill && prefill.client) || '');
+  document.getElementById('f-title').value = item ? item.title : ((prefill && prefill.title) || '');
   document.getElementById('f-format').value = item ? item.format : 'Reel';
   document.getElementById('f-assignee').value = item ? item.assignee : '';
   document.getElementById('f-due').value = item ? (item.due || '') : (prefillDate || '');
-  document.getElementById('f-drive').value = item ? (item.drive || '') : '';
+  document.getElementById('f-drive').value = item ? (item.drive || '') : ((prefill && prefill.drive) || '');
   document.getElementById('f-cta').value = item ? (item.cta || '') : '';
   document.getElementById('f-copy').value = item ? (item.copyFinal || '') : '';
-  document.getElementById('f-stage').value = item ? item.stage : 'idea';
+  document.getElementById('f-stage').value = item ? item.stage : ((prefill && prefill.stage) || state.stages[0].key);
   document.getElementById('f-blocked').checked = item ? !!item.blocked : false;
   document.getElementById('delete-btn').style.display = item ? 'inline' : 'none';
   modalImages = (item && item.images ? item.images : []).map(url => ({id: uid(), url, uploading:false}));
@@ -1435,21 +1557,37 @@ document.getElementById('idea-form').addEventListener('submit', async e => {
   e.preventDefault();
   const title = document.getElementById('i-title').value.trim();
   if(!title) return;
+  const link = document.getElementById('i-link').value.trim();
   const data = {
     title,
     type: document.getElementById('i-type').value,
     client: document.getElementById('i-client').value.trim(),
     notes: document.getElementById('i-notes').value.trim(),
-    link: document.getElementById('i-link').value.trim(),
+    link,
   };
+  let idea, needsPreview;
   if(editingIdea){
-    Object.assign(state.ideas.find(x => x.id === editingIdea), data);
+    idea = state.ideas.find(x => x.id === editingIdea);
+    needsPreview = !!link && link !== idea.link;
+    Object.assign(idea, data);
   } else {
-    state.ideas.push({id: uid(), ...data});
+    idea = {id: uid(), status: 'nueva', preview: null, ...data};
+    state.ideas.push(idea);
+    needsPreview = !!link;
   }
+  if(needsPreview) idea.preview = null; // se limpia mientras se busca la nueva vista previa
   saveState().then(ok => { if(ok) showToast('Guardado'); });
   renderAll();
   closeIdeaModal();
+
+  if(needsPreview){
+    const preview = await fetchLinkPreview(link);
+    if(idea.link === link){ // el link pudo cambiar de nuevo mientras esperábamos
+      idea.preview = preview;
+      saveState();
+      renderIdeas();
+    }
+  }
 });
 
 document.getElementById('idea-delete-btn').addEventListener('click', () => {
