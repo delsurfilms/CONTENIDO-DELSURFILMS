@@ -216,6 +216,13 @@
   .stage-count{font-size:11px;color:var(--ink-faint);font-family:'IBM Plex Mono',monospace;flex-shrink:0;min-width:56px;text-align:right;}
   .stage-del{border:none;background:none;color:var(--ink-faint);cursor:pointer;font-size:15px;padding:4px 6px;flex-shrink:0;}
   .stage-del:hover{color:var(--accent);}
+  .cal-filter{position:relative;}
+  .cal-filter-panel{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:210px;max-height:280px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.18);z-index:30;}
+  .cal-filter-panel.open{display:block;}
+  .cal-filter-actions{display:flex;justify-content:space-between;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--line);}
+  .cal-filter-actions button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:11px;padding:0;}
+  .cal-filter-row{display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;color:var(--ink);cursor:pointer;}
+  .cal-filter-row input{flex-shrink:0;}
 
   /* ---------- clients & ideas grids ---------- */
   .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
@@ -355,6 +362,10 @@
           <div class="sub">Piezas por fecha límite / publicación.</div>
         </div>
         <div class="cal-nav">
+          <div class="cal-filter" id="cal-filter">
+            <button type="button" class="btn ghost" id="cal-filter-btn" style="font-size:12px;padding:6px 12px;">☰ Filtrar clientes</button>
+            <div class="cal-filter-panel" id="cal-filter-panel"></div>
+          </div>
           <button class="icon-btn" id="cal-prev">‹</button>
           <div class="cal-month-label" id="cal-label"></div>
           <button class="icon-btn" id="cal-next">›</button>
@@ -1030,9 +1041,10 @@ function renderCalendar(){
   document.getElementById('cal-label').textContent = label;
   document.getElementById('cal-label-stories').textContent = label;
 
-  // el calendario de Historias vive aparte, así que el principal no la duplica
-  const mainItems = state.items.filter(i => i.format !== 'Story');
-  const storyItems = state.items.filter(i => i.format === 'Story');
+  // el calendario de Historias vive aparte, así que el principal no la duplica.
+  // hiddenClients (filtro "Filtrar clientes") aplica a los dos calendarios por igual.
+  const mainItems = state.items.filter(i => i.format !== 'Story' && !hiddenClients.has(i.client));
+  const storyItems = state.items.filter(i => i.format === 'Story' && !hiddenClients.has(i.client));
 
   const mainGrid = document.getElementById('cal-grid');
   const storyGrid = document.getElementById('cal-grid-stories');
@@ -1040,7 +1052,57 @@ function renderCalendar(){
   storyGrid.innerHTML = buildCalendarHtml(storyItems, year, month);
   wireCalendarGrid(mainGrid);
   wireCalendarGrid(storyGrid);
+
+  renderClientFilter();
 }
+
+/* ---------- filtro de clientes del calendario (afecta al general y al de Historias) ----------
+   Preferencia solo de esta sesión/navegador: arranca siempre con todos los
+   clientes tildados (nada oculto), como se pidió. */
+let hiddenClients = new Set();
+
+function renderClientFilter(){
+  const panel = document.getElementById('cal-filter-panel');
+  const names = [...new Set(state.clients)];
+  const btn = document.getElementById('cal-filter-btn');
+  const activeCount = names.length - hiddenClients.size;
+  btn.textContent = hiddenClients.size === 0 ? '☰ Filtrar clientes' : `☰ Filtrar clientes (${activeCount}/${names.length})`;
+
+  if(!names.length){
+    panel.innerHTML = `<div class="sub" style="padding:4px 2px;">Todavía no hay clientes cargados.</div>`;
+    return;
+  }
+  panel.innerHTML = `
+    <div class="cal-filter-actions">
+      <button type="button" id="cal-filter-all">Marcar todos</button>
+      <button type="button" id="cal-filter-none">Desmarcar todos</button>
+    </div>
+    ${names.map(name => `
+      <label class="cal-filter-row">
+        <input type="checkbox" data-client="${esc(name)}" ${hiddenClients.has(name) ? '' : 'checked'}>
+        ${esc(name)}
+      </label>
+    `).join('')}
+  `;
+  panel.querySelectorAll('input[type=checkbox]').forEach(chk => {
+    chk.addEventListener('change', () => {
+      if(chk.checked) hiddenClients.delete(chk.dataset.client); else hiddenClients.add(chk.dataset.client);
+      renderCalendar();
+    });
+  });
+  document.getElementById('cal-filter-all').addEventListener('click', () => { hiddenClients.clear(); renderCalendar(); });
+  document.getElementById('cal-filter-none').addEventListener('click', () => { hiddenClients = new Set(names); renderCalendar(); });
+}
+
+document.getElementById('cal-filter-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('cal-filter-panel').classList.toggle('open');
+});
+document.addEventListener('click', e => {
+  const panel = document.getElementById('cal-filter-panel');
+  const wrap = document.getElementById('cal-filter');
+  if(panel.classList.contains('open') && !wrap.contains(e.target)) panel.classList.remove('open');
+});
 document.getElementById('cal-prev').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()-1); renderCalendar(); });
 document.getElementById('cal-next').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()+1); renderCalendar(); });
 
